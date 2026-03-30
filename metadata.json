@@ -1,0 +1,5 @@
+{
+  "name": "MySubs",
+  "description": "A production-ready subscription management PWA with zero-friction PIN login, automated payments, and growth analytics.",
+  "requestFramePermissions": []
+}

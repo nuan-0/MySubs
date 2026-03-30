@@ -1,0 +1,130 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (UID)
+    // Fields:
+    //   - uid: string (required)
+    //   - name: string (optional)
+    //   - email: string (required, email format)
+    //   - country: string (optional)
+    //   - currency: string (optional, ₹ or $)
+    //   - isPro: boolean (optional)
+    //   - proUntil: timestamp (optional)
+    //   - isAdmin: boolean (optional)
+    //   - trialStartDate: timestamp (required)
+    //
+    // Collection: subscriptions
+    // Document ID: subId (auto-generated)
+    // Fields:
+    //   - uid: string (required, owner UID)
+    //   - name: string (required)
+    //   - price: number (required, positive)
+    //   - billingCycle: string (required, 'monthly' or 'yearly')
+    //   - nextRenewal: timestamp (required)
+    //   - icon: string (optional)
+    //
+    // Collection: ResetRequests
+    // Document ID: requestId (auto-generated)
+    // Fields:
+    //   - email: string (required, email format)
+    //   - requestedAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true) ||
+          request.auth.token.email == "krishnaprayers108@gmail.com"
+        );
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'trialStartDate']) &&
+             data.keys().hasOnly(['uid', 'email', 'trialStartDate', 'name', 'isPro', 'proUntil', 'isAdmin', 'currency', 'country']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             data.trialStartDate is timestamp;
+    }
+
+    function isValidSubscription(data) {
+      return data.keys().hasAll(['uid', 'name', 'price', 'billingCycle', 'nextRenewal']) &&
+             data.uid == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.price is number && data.price >= 0 &&
+             data.billingCycle in ['monthly', 'yearly'] &&
+             data.nextRenewal is timestamp;
+    }
+
+    function isValidResetRequest(data) {
+      return data.keys().hasAll(['email', 'requestedAt']) &&
+             isValidEmail(data.email) &&
+             data.requestedAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
+                      (
+                        !('isAdmin' in request.resource.data) || 
+                        request.resource.data.isAdmin == false || 
+                        request.auth.token.email == "krishnaprayers108@gmail.com" ||
+                        isAdmin()
+                      );
+      allow update: if (isOwner(userId) || isAdmin()) && 
+                      (
+                        !('isAdmin' in request.resource.data) || 
+                        request.resource.data.isAdmin == resource.data.get('isAdmin', false) || 
+                        isAdmin()
+                      ) &&
+                      (
+                        !('isPro' in request.resource.data) || 
+                        request.resource.data.isPro == resource.data.get('isPro', false) || 
+                        isAdmin()
+                      ) &&
+                      (
+                        !('proUntil' in request.resource.data) || 
+                        request.resource.data.proUntil == resource.data.get('proUntil', null) || 
+                        isAdmin()
+                      ) &&
+                      (request.resource.data.email == resource.data.email); // Email immutable
+    }
+
+    match /subscriptions/{subId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidSubscription(request.resource.data);
+      allow update: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin()) && isValidSubscription(request.resource.data);
+      allow delete: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+    }
+
+    match /ResetRequests/{requestId} {
+      allow create: if isValidResetRequest(request.resource.data);
+      allow read, delete: if isAdmin();
+    }
+  }
+}

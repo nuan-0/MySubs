@@ -1,0 +1,58 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and subscription status",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "name": { "type": "string", "description": "User's full name" },
+        "email": { "type": "string", "format": "email", "description": "User's email address" },
+        "country": { "type": "string", "description": "User's country" },
+        "currency": { "type": "string", "description": "User's preferred currency (₹ or $)" },
+        "isPro": { "type": "boolean", "description": "Whether the user has a pro subscription" },
+        "isAdmin": { "type": "boolean", "description": "Whether the user is an administrator" },
+        "trialStartDate": { "type": "string", "format": "date-time", "description": "When the user started their free trial" }
+      },
+      "required": ["uid", "email", "trialStartDate"]
+    },
+    "Subscription": {
+      "title": "Subscription",
+      "description": "A user's subscription record",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Owner's UID" },
+        "name": { "type": "string", "description": "Subscription name" },
+        "price": { "type": "number", "description": "Price of the subscription" },
+        "billingCycle": { "type": "string", "enum": ["monthly", "yearly"], "description": "Billing frequency" },
+        "nextRenewal": { "type": "string", "format": "date-time", "description": "Next renewal date" },
+        "icon": { "type": "string", "description": "Icon name or identifier" }
+      },
+      "required": ["uid", "name", "price", "billingCycle", "nextRenewal"]
+    },
+    "ResetRequest": {
+      "title": "ResetRequest",
+      "description": "A request to reset a user's PIN",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email", "description": "User's email address" },
+        "requestedAt": { "type": "string", "format": "date-time", "description": "When the request was made" }
+      },
+      "required": ["email", "requestedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents"
+    },
+    "/subscriptions/{subId}": {
+      "schema": "Subscription",
+      "description": "Subscription records"
+    },
+    "/ResetRequests/{requestId}": {
+      "schema": "ResetRequest",
+      "description": "PIN reset requests"
+    }
+  }
+}
