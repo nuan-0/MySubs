@@ -21,6 +21,7 @@ export interface Config {
   proPriceYearly: number;
   proPriceMonthlyOld?: number;
   proPriceYearlyOld?: number;
+  currency?: string;
 }
 
 export interface Subscription {

@@ -68,7 +68,8 @@ export default function AdminVault() {
     monthly: '',
     yearly: '',
     monthlyOld: '',
-    yearlyOld: ''
+    yearlyOld: '',
+    currency: '$'
   });
   const navigate = useNavigate();
 
@@ -99,7 +100,8 @@ export default function AdminVault() {
           monthly: data.proPriceMonthly.toString(),
           yearly: data.proPriceYearly.toString(),
           monthlyOld: data.proPriceMonthlyOld?.toString() || '',
-          yearlyOld: data.proPriceYearlyOld?.toString() || ''
+          yearlyOld: data.proPriceYearlyOld?.toString() || '',
+          currency: data.currency || '$'
         });
       }
     });
@@ -201,7 +203,8 @@ export default function AdminVault() {
         proPriceMonthly: parseFloat(pricingForm.monthly),
         proPriceYearly: parseFloat(pricingForm.yearly),
         proPriceMonthlyOld: pricingForm.monthlyOld ? parseFloat(pricingForm.monthlyOld) : null,
-        proPriceYearlyOld: pricingForm.yearlyOld ? parseFloat(pricingForm.yearlyOld) : null
+        proPriceYearlyOld: pricingForm.yearlyOld ? parseFloat(pricingForm.yearlyOld) : null,
+        currency: pricingForm.currency
       }, { merge: true });
       toast.success("Pricing updated!");
     } catch (error) {
@@ -280,7 +283,7 @@ export default function AdminVault() {
           <div className="flex items-center gap-2 md:gap-3 text-white/40 mb-1 md:mb-2">
             <Icons.DollarSign /> <span className="text-[10px] uppercase font-bold">Est. Revenue</span>
           </div>
-          <p className="text-2xl md:text-4xl font-bold text-white">{formatCurrency(stats.revenue)}</p>
+          <p className="text-2xl md:text-4xl font-bold text-white">{formatCurrency(stats.revenue, config?.currency)}</p>
         </div>
       </div>
 
@@ -330,6 +333,19 @@ export default function AdminVault() {
                   className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
                 />
               </div>
+            </div>
+            <div>
+              <label className="text-[10px] uppercase font-bold text-white/40 mb-1 block">Currency Sign</label>
+              <select 
+                value={pricingForm.currency}
+                onChange={(e) => setPricingForm({...pricingForm, currency: e.target.value})}
+                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:ring-1 focus:ring-purple-500 appearance-none"
+              >
+                <option value="$">$ (USD)</option>
+                <option value="₹">₹ (INR)</option>
+                <option value="€">€ (EUR)</option>
+                <option value="£">£ (GBP)</option>
+              </select>
             </div>
             <button 
               onClick={handleUpdatePricing}

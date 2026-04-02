@@ -157,6 +157,17 @@ export function AuthForm() {
           await signInAnonymously(auth);
         }
         
+        // Fetch default currency from config
+        let defaultCurrency = '$';
+        try {
+          const configSnap = await getDoc(doc(db, 'config', 'pricing'));
+          if (configSnap.exists()) {
+            defaultCurrency = configSnap.data().currency || '$';
+          }
+        } catch (e) {
+          console.error("Failed to fetch default currency:", e);
+        }
+
         const newUserUid = auth.currentUser?.uid || `user_${Date.now()}`;
         await setDoc(doc(db, 'users', newUserUid), {
           uid: newUserUid,
@@ -166,7 +177,7 @@ export function AuthForm() {
           trialStartDate: Timestamp.now(),
           isPro: false,
           isAdmin: email === "krishnaprayers108@gmail.com",
-          currency: '$'
+          currency: defaultCurrency
         });
 
         localStorage.setItem('mysubs_email', email);

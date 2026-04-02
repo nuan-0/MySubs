@@ -1,0 +1,23 @@
+{
+  "name": "MySubs - Subscription Management",
+  "short_name": "MySubs",
+  "description": "Manage your subscriptions securely and efficiently.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#9333ea",
+  "icons": [
+    {
+      "src": "https://picsum.photos/seed/mysubs/192/192",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://picsum.photos/seed/mysubs/512/512",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

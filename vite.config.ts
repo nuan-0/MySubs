@@ -12,25 +12,35 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
+        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
         manifest: {
-          name: 'MySubs',
+          name: 'MySubs - Subscription Management',
           short_name: 'MySubs',
-          description: 'Subscription Management Vault',
-          theme_color: '#A855F7',
-          background_color: '#000000',
+          description: 'Securely manage your subscriptions and save money.',
+          theme_color: '#9333ea',
+          background_color: '#09090b',
           display: 'standalone',
+          orientation: 'portrait',
+          scope: '/',
+          start_url: '/',
           icons: [
             {
-              src: 'https://api.dicebear.com/7.x/avataaars/svg?seed=mysubs&backgroundColor=A855F7',
+              src: 'https://picsum.photos/seed/mysubs/192/192',
               sizes: '192x192',
-              type: 'image/svg+xml',
-              purpose: 'any maskable'
+              type: 'image/png',
+              purpose: 'any'
             },
             {
-              src: 'https://api.dicebear.com/7.x/avataaars/svg?seed=mysubs&backgroundColor=A855F7',
+              src: 'https://picsum.photos/seed/mysubs/512/512',
               sizes: '512x512',
-              type: 'image/svg+xml',
-              purpose: 'any maskable'
+              type: 'image/png',
+              purpose: 'any'
+            },
+            {
+              src: 'https://picsum.photos/seed/mysubs/512/512',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable'
             }
           ]
         }

@@ -6,8 +6,20 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(amount: number, currency: string = '$') {
-  return new Intl.NumberFormat(currency === '₹' ? 'en-IN' : 'en-US', {
+  const currencyMap: { [key: string]: string } = {
+    '₹': 'INR',
+    '$': 'USD',
+    '€': 'EUR',
+    '£': 'GBP'
+  };
+  
+  const currencyCode = currencyMap[currency] || 'USD';
+  const locale = currency === '₹' ? 'en-IN' : 'en-US';
+
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: currency === '₹' ? 'INR' : 'USD',
+    currency: currencyCode,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
   }).format(amount);
 }

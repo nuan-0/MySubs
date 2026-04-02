@@ -392,7 +392,7 @@ export default function Profile() {
                     </span>
                   )}
                   <p className="text-3xl font-bold text-white inline-block">
-                    {profile?.currency}{config?.proPriceMonthly || (profile?.currency === '₹' ? '99' : '17')}
+                    {profile?.currency || config?.currency || '$'}{config?.proPriceMonthly || (profile?.currency === '₹' ? '99' : '17')}
                     <span className="text-sm text-white/40 font-normal">/mo</span>
                   </p>
                 </div>
@@ -411,11 +411,11 @@ export default function Profile() {
                 <div className="mt-2">
                   {config?.proPriceYearlyOld && (
                     <span className="text-sm text-white/20 line-through mr-2">
-                      {profile?.currency}{config.proPriceYearlyOld}
+                      {profile?.currency || config?.currency || '$'}{config.proPriceYearlyOld}
                     </span>
                   )}
                   <p className="text-3xl font-bold text-white inline-block">
-                    {profile?.currency}{config?.proPriceYearly || (profile?.currency === '₹' ? '999' : '123')}
+                    {profile?.currency || config?.currency || '$'}{config?.proPriceYearly || (profile?.currency === '₹' ? '999' : '123')}
                     <span className="text-sm text-white/40 font-normal">/yr</span>
                   </p>
                 </div>
