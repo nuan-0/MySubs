@@ -47,6 +47,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const data = docSnap.data() as UserProfile;
         setProfile(data);
 
+        // Auto-unlock for admin or Google users
+        const isGoogleUser = user.providerData.some(p => p.providerId === 'google.com');
+        if (data.isAdmin || user.email === ADMIN_EMAIL || isGoogleUser) {
+          setUnlocked(true);
+        }
+
         // Auto-upgrade admin account to Pro until 2099
         if (user.email === ADMIN_EMAIL && (!data.isPro || !data.proExpiryDate)) {
           const proExpiryDate = new Date(2099, 11, 31); // Dec 31, 2099
