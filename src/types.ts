@@ -19,6 +19,9 @@ export interface Subscription {
   price: number;
   billingCycle: 'monthly' | 'yearly';
   nextRenewal: Timestamp;
+  createdAt: Timestamp;
+  category: 'Entertainment' | 'Productivity' | 'Utilities' | 'Food' | 'Health' | 'Other';
+  status: 'active' | 'paused';
   icon?: string;
 }
 
@@ -26,4 +29,14 @@ export interface ResetRequest {
   id: string;
   email: string;
   requestedAt: Timestamp;
+}
+
+export interface Message {
+  id: string;
+  uid: string;
+  email: string;
+  content: string;
+  sentAt: Timestamp;
+  status: 'unread' | 'read' | 'replied';
+  reply?: string;
 }

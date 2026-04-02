@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { auth, db, doc, setDoc, getDoc, Timestamp, addDoc, collection, updateDoc, GoogleAuthProvider, signInWithPopup } from '../firebase';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from './AuthProvider';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 
@@ -23,7 +24,8 @@ const Icons = {
   )
 };
 
-export default function AuthScreen() {
+export function AuthForm() {
+  const { setUnlocked } = useAuth();
   const [email, setEmail] = useState(localStorage.getItem('mysubs_email') || '');
   const [pin, setPin] = useState('');
   const [step, setStep] = useState(email ? 'pin' : 'email');
@@ -56,7 +58,8 @@ export default function AuthScreen() {
 
       localStorage.setItem('mysubs_email', user.email || '');
       toast.success("Logged in with Google!");
-      navigate('/');
+      setUnlocked(true);
+      navigate('/dashboard');
     } catch (error: any) {
       toast.error(error.message || "Google Login Failed");
     } finally {
@@ -110,7 +113,8 @@ export default function AuthScreen() {
 
       localStorage.setItem('mysubs_email', email);
       toast.success("Welcome back!");
-      navigate('/');
+      setUnlocked(true);
+      navigate('/dashboard');
     } catch (error: any) {
       if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
         try {
@@ -129,7 +133,8 @@ export default function AuthScreen() {
           
           localStorage.setItem('mysubs_email', email);
           toast.success("Account created!");
-          navigate('/');
+          setUnlocked(true);
+          navigate('/dashboard');
         } catch (createError: any) {
           if (createError.code === 'auth/email-already-in-use') {
             toast.error("Incorrect PIN");
@@ -174,6 +179,129 @@ export default function AuthScreen() {
   };
 
   return (
+    <div className="bg-zinc-900/50 border border-white/10 p-8 rounded-3xl shadow-2xl w-full max-w-md">
+      {step === 'email' ? (
+        <div className="space-y-6">
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-white/60 mb-2">Email Address</label>
+            <div className="relative">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40">
+                <Icons.Mail />
+              </div>
+              <input 
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all"
+              />
+            </div>
+          </div>
+          <button 
+            onClick={handleEmailNext}
+            disabled={loading}
+            className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+          >
+            {loading ? "Checking..." : "Continue"}
+            <Icons.ChevronRight />
+          </button>
+
+          <div className="relative my-8">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-white/10"></div>
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-zinc-900 px-4 text-white/40">Or continue with</span>
+            </div>
+          </div>
+
+          <button 
+            onClick={handleGoogleLogin}
+            disabled={loading}
+            className="w-full bg-white/5 hover:bg-white/10 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-3 transition-all border border-white/10 active:scale-95 disabled:opacity-50"
+          >
+            <Icons.Chrome />
+            Google Login
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center">
+          <div className="mb-8 text-center">
+            <p className="text-white/60 mb-2">Enter PIN for</p>
+            <p className="text-white font-medium">{email}</p>
+            <button 
+              onClick={() => { setStep('email'); setPin(''); }}
+              className="text-purple-500 text-xs mt-2 hover:underline"
+            >
+              Change Email
+            </button>
+          </div>
+
+          <div className="flex gap-4 mb-12">
+            {[...Array(4)].map((_, i) => (
+              <div 
+                key={i}
+                className={cn(
+                  "w-4 h-4 rounded-full border-2 border-purple-500/50 transition-all duration-300",
+                  pin.length > i ? "bg-purple-500 scale-125 shadow-[0_0_10px_rgba(168,85,247,0.8)]" : "bg-transparent"
+                )}
+              />
+            ))}
+          </div>
+
+          <div className="grid grid-cols-3 gap-4 md:gap-6 mb-8">
+            {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((num) => (
+              <button 
+                key={num}
+                disabled={loading}
+                onClick={() => handleNumpadClick(num)}
+                className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-xl md:text-2xl font-bold transition-all active:scale-90 disabled:opacity-50"
+              >
+                {num}
+              </button>
+            ))}
+            <div />
+            <button 
+              key="0"
+              disabled={loading}
+              onClick={() => handleNumpadClick('0')}
+              className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-xl md:text-2xl font-bold transition-all active:scale-90 disabled:opacity-50"
+            >
+              0
+            </button>
+            <button 
+              onClick={handleBackspace}
+              disabled={loading}
+              className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-transparent hover:bg-white/5 flex items-center justify-center transition-all active:scale-90 disabled:opacity-50"
+            >
+              <Icons.Delete />
+            </button>
+          </div>
+
+          <button 
+            onClick={() => handlePinSubmit(pin)}
+            disabled={loading || pin.length !== 4}
+            className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-4 rounded-2xl mb-8 shadow-lg shadow-purple-500/20 transition-all active:scale-95 disabled:opacity-50 disabled:grayscale"
+          >
+            {loading ? "Verifying..." : "Login"}
+          </button>
+
+          <button 
+            onClick={handleForgotPin}
+            className="text-white/40 text-sm hover:text-white transition-colors"
+          >
+            Forgot PIN? Request Reset
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function AuthScreen() {
+  const navigate = useNavigate();
+
+  return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-black text-white">
       <div className="w-full max-w-md">
         <div className="text-center mb-12">
@@ -183,122 +311,8 @@ export default function AuthScreen() {
           <p className="text-white/60">Manage subscriptions with ease.</p>
         </div>
 
-        <div className="bg-zinc-900/50 border border-white/10 p-8 rounded-3xl shadow-2xl">
-          {step === 'email' ? (
-            <div className="space-y-6">
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-white/60 mb-2">Email Address</label>
-                <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40">
-                    <Icons.Mail />
-                  </div>
-                  <input 
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all"
-                  />
-                </div>
-              </div>
-              <button 
-                onClick={handleEmailNext}
-                disabled={loading}
-                className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
-              >
-                {loading ? "Checking..." : "Continue"}
-                <Icons.ChevronRight />
-              </button>
-
-              <div className="relative my-8">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-white/10"></div>
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-zinc-900 px-4 text-white/40">Or continue with</span>
-                </div>
-              </div>
-
-              <button 
-                onClick={handleGoogleLogin}
-                disabled={loading}
-                className="w-full bg-white/5 hover:bg-white/10 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-3 transition-all border border-white/10 active:scale-95 disabled:opacity-50"
-              >
-                <Icons.Chrome />
-                Google Login
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center">
-              <div className="mb-8 text-center">
-                <p className="text-white/60 mb-2">Enter PIN for</p>
-                <p className="text-white font-medium">{email}</p>
-                <button 
-                  onClick={() => { setStep('email'); setPin(''); }}
-                  className="text-purple-500 text-xs mt-2 hover:underline"
-                >
-                  Change Email
-                </button>
-              </div>
-
-              <div className="flex gap-4 mb-12">
-                {[...Array(4)].map((_, i) => (
-                  <div 
-                    key={i}
-                    className={cn(
-                      "w-4 h-4 rounded-full border-2 border-purple-500/50 transition-all duration-300",
-                      pin.length > i ? "bg-purple-500 scale-125 shadow-[0_0_10px_rgba(168,85,247,0.8)]" : "bg-transparent"
-                    )}
-                  />
-                ))}
-              </div>
-
-              <div className="grid grid-cols-3 gap-4 md:gap-6 mb-8">
-                {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((num) => (
-                  <button 
-                    key={num}
-                    disabled={loading}
-                    onClick={() => handleNumpadClick(num)}
-                    className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-xl md:text-2xl font-bold transition-all active:scale-90 disabled:opacity-50"
-                  >
-                    {num}
-                  </button>
-                ))}
-                <div />
-                <button 
-                  key="0"
-                  disabled={loading}
-                  onClick={() => handleNumpadClick('0')}
-                  className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-xl md:text-2xl font-bold transition-all active:scale-90 disabled:opacity-50"
-                >
-                  0
-                </button>
-                <button 
-                  onClick={handleBackspace}
-                  disabled={loading}
-                  className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-transparent hover:bg-white/5 flex items-center justify-center transition-all active:scale-90 disabled:opacity-50"
-                >
-                  <Icons.Delete />
-                </button>
-              </div>
-
-              <button 
-                onClick={() => handlePinSubmit(pin)}
-                disabled={loading || pin.length !== 4}
-                className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-4 rounded-2xl mb-8 shadow-lg shadow-purple-500/20 transition-all active:scale-95 disabled:opacity-50 disabled:grayscale"
-              >
-                {loading ? "Verifying..." : "Login"}
-              </button>
-
-              <button 
-                onClick={handleForgotPin}
-                className="text-white/40 text-sm hover:text-white transition-colors"
-              >
-                Forgot PIN? Request Reset
-              </button>
-            </div>
-          )}
-        </div>
+        <AuthForm />
+        
         <div className="mt-8 flex justify-center gap-6 text-xs text-white/20">
           <button onClick={() => navigate('/privacy')} className="hover:text-white/40 transition-colors">Privacy Policy</button>
           <button onClick={() => navigate('/terms')} className="hover:text-white/40 transition-colors">Terms of Service</button>

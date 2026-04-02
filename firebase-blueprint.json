@@ -26,9 +26,12 @@
         "price": { "type": "number", "description": "Price of the subscription" },
         "billingCycle": { "type": "string", "enum": ["monthly", "yearly"], "description": "Billing frequency" },
         "nextRenewal": { "type": "string", "format": "date-time", "description": "Next renewal date" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the subscription was added" },
+        "category": { "type": "string", "enum": ["Entertainment", "Productivity", "Utilities", "Food", "Health", "Other"], "description": "Subscription category" },
+        "status": { "type": "string", "enum": ["active", "paused"], "description": "Subscription status" },
         "icon": { "type": "string", "description": "Icon name or identifier" }
       },
-      "required": ["uid", "name", "price", "billingCycle", "nextRenewal"]
+      "required": ["uid", "name", "price", "billingCycle", "nextRenewal", "createdAt", "category", "status"]
     },
     "ResetRequest": {
       "title": "ResetRequest",
@@ -39,6 +42,20 @@
         "requestedAt": { "type": "string", "format": "date-time", "description": "When the request was made" }
       },
       "required": ["email", "requestedAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A message from a user to the admin",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Sender's UID" },
+        "email": { "type": "string", "format": "email", "description": "Sender's email" },
+        "content": { "type": "string", "description": "Message content" },
+        "sentAt": { "type": "string", "format": "date-time", "description": "When the message was sent" },
+        "status": { "type": "string", "enum": ["unread", "read", "replied"], "description": "Message status" },
+        "reply": { "type": "string", "description": "Admin's reply" }
+      },
+      "required": ["uid", "email", "content", "sentAt", "status"]
     }
   },
   "firestore": {
@@ -53,6 +70,10 @@
     "/ResetRequests/{requestId}": {
       "schema": "ResetRequest",
       "description": "PIN reset requests"
+    },
+    "/messages/{messageId}": {
+      "schema": "Message",
+      "description": "User messages to admin"
     }
   }
 }

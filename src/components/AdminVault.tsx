@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db, collection, query, onSnapshot, doc, deleteDoc, Timestamp, auth } from '../firebase';
+import { db, collection, query, onSnapshot, doc, deleteDoc, Timestamp, auth, updateDoc } from '../firebase';
 import { useAuth } from './AuthProvider';
-import { UserProfile, ResetRequest } from '../types';
+import { UserProfile, ResetRequest, Message } from '../types';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import confetti from 'canvas-confetti';
@@ -26,6 +26,12 @@ const Icons = {
   Key: () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3L15.5 7.5z"/></svg>
   ),
+  MessageSquare: () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+  ),
+  Send: () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polyline points="22 2 15 22 11 13 2 9 22 2"/></svg>
+  ),
   Check: () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
   )
@@ -35,8 +41,11 @@ export default function AdminVault() {
   const { profile } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [requests, setRequests] = useState<ResetRequest[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [newPin, setNewPin] = useState('');
   const [selectedEmail, setSelectedEmail] = useState('');
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [adminReply, setAdminReply] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -53,9 +62,16 @@ export default function AdminVault() {
       console.error("Admin Requests Fetch Error:", error);
       toast.error("Access Denied to Reset Requests");
     });
+    const unsubMessages = onSnapshot(collection(db, 'messages'), (snapshot) => {
+      setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message)));
+    }, (error) => {
+      console.error("Admin Messages Fetch Error:", error);
+      toast.error("Access Denied to Messages");
+    });
     return () => {
       unsubUsers();
       unsubRequests();
+      unsubMessages();
     };
   }, []);
 
@@ -121,11 +137,29 @@ export default function AdminVault() {
     }
   };
 
+  const handleReplyMessage = async () => {
+    if (!selectedMessage || !adminReply.trim()) return;
+    setLoading(true);
+    try {
+      await updateDoc(doc(db, 'messages', selectedMessage.id), {
+        reply: adminReply,
+        status: 'replied'
+      });
+      toast.success("Reply sent!");
+      setAdminReply('');
+      setSelectedMessage(null);
+    } catch (error) {
+      toast.error("Failed to send reply");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto p-4 md:p-6 pb-12">
       <header className="flex items-center gap-3 md:gap-4 mb-6 md:mb-12">
         <button 
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/dashboard')}
           className="p-2 md:p-3 bg-white/5 border border-white/10 rounded-xl md:rounded-2xl hover:bg-white/10 transition-all text-white"
         >
           <Icons.ChevronLeft />
@@ -213,6 +247,87 @@ export default function AdminVault() {
                 className="bg-purple-600 hover:bg-purple-500 text-white px-8 rounded-2xl font-bold flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
               >
                 {loading ? "Updating..." : <><Icons.Check /> Set New PIN</>}
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* User Messages */}
+      <section className="bg-zinc-900/50 border border-white/10 p-8 rounded-[40px] shadow-2xl mt-8">
+        <h2 className="text-xl font-bold mb-8 flex items-center gap-2 text-white">
+          <div className="text-purple-500"><Icons.MessageSquare /></div> User Messages
+        </h2>
+
+        {messages.length === 0 ? (
+          <div className="text-center py-12 text-white/20">
+            No messages yet.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {messages.sort((a, b) => b.sentAt.toMillis() - a.sentAt.toMillis()).map((msg) => (
+              <div 
+                key={msg.id}
+                className={cn(
+                  "p-4 rounded-2xl border transition-all flex flex-col gap-3",
+                  selectedMessage?.id === msg.id ? "bg-purple-500/10 border-purple-500" : "bg-white/5 border-white/5",
+                  msg.status === 'replied' && "opacity-60"
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-bold text-white">{msg.email}</p>
+                    <p className="text-xs text-white/40">{msg.sentAt.toDate().toLocaleString()}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      "text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-widest",
+                      msg.status === 'unread' ? "bg-red-500/20 text-red-500" : 
+                      msg.status === 'replied' ? "bg-green-500/20 text-green-500" : "bg-blue-500/20 text-blue-500"
+                    )}>
+                      {msg.status}
+                    </span>
+                    <button 
+                      onClick={() => setSelectedMessage(msg)}
+                      className={cn(
+                        "px-4 py-2 rounded-xl text-sm font-bold transition-all",
+                        selectedMessage?.id === msg.id ? "bg-purple-600 text-white" : "bg-white/5 hover:bg-white/10 text-white/60"
+                      )}
+                    >
+                      {msg.status === 'replied' ? 'View' : 'Reply'}
+                    </button>
+                  </div>
+                </div>
+                <div className="bg-black/20 p-3 rounded-xl text-sm text-white/80 italic">
+                  "{msg.content}"
+                </div>
+                {msg.reply && (
+                  <div className="bg-purple-500/10 p-3 rounded-xl text-sm text-purple-300 border border-purple-500/20">
+                    <p className="text-[10px] font-bold uppercase mb-1">Admin Reply:</p>
+                    {msg.reply}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {selectedMessage && selectedMessage.status !== 'replied' && (
+          <div className="mt-8 pt-8 border-t border-white/10">
+            <p className="text-sm text-white/60 mb-4">Reply to <span className="text-white font-bold">{selectedMessage.email}</span></p>
+            <div className="flex flex-col gap-4">
+              <textarea 
+                value={adminReply}
+                onChange={(e) => setAdminReply(e.target.value)}
+                placeholder="Type your reply here..."
+                className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 min-h-[100px] resize-none"
+              />
+              <button 
+                onClick={handleReplyMessage}
+                disabled={loading || !adminReply.trim()}
+                className="bg-purple-600 hover:bg-purple-500 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+              >
+                {loading ? "Sending..." : <><Icons.Send /> Send Reply</>}
               </button>
             </div>
           </div>
