@@ -7,6 +7,7 @@ import confetti from 'canvas-confetti';
 import { cn, formatCurrency } from '../lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
+import InstallPrompt from './InstallPrompt';
 
 const POPULAR_SUBS = [
   { 
@@ -1054,6 +1055,8 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      <InstallPrompt />
     </div>
   );
 }
