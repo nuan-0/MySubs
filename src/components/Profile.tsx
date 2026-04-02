@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth, doc, updateDoc, signOut } from '../firebase';
+import { db, auth, doc, updateDoc, signOut, onSnapshot } from '../firebase';
 import { useAuth } from './AuthProvider';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { cn, formatCurrency } from '../lib/utils';
 import { motion } from 'motion/react';
+import { Config } from '../types';
 
 const COUNTRIES = [
   { name: 'India', code: 'IN', currency: '₹' },
@@ -46,6 +47,9 @@ export default function Profile() {
   const [name, setName] = useState(profile?.name || '');
   const [country, setCountry] = useState(profile?.country || 'United States');
   const [loading, setLoading] = useState(false);
+  const [isChangingPin, setIsChangingPin] = useState(false);
+  const [pinForm, setPinForm] = useState({ currentPin: '', newPin: '', confirmPin: '' });
+  const [config, setConfig] = useState<Config | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -54,6 +58,15 @@ export default function Profile() {
       setCountry(profile.country || 'United States');
     }
   }, [profile]);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'config', 'pricing'), (snap) => {
+      if (snap.exists()) {
+        setConfig(snap.data() as Config);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   const handleSave = async () => {
     if (!user) return;
@@ -78,8 +91,40 @@ export default function Profile() {
     navigate('/auth');
   };
 
+  const handleUpdatePin = async () => {
+    if (!user || !profile) return;
+    if (pinForm.newPin.length !== 4) {
+      toast.error("New PIN must be 4 digits");
+      return;
+    }
+    if (pinForm.newPin !== pinForm.confirmPin) {
+      toast.error("New PINs do not match");
+      return;
+    }
+    if (pinForm.currentPin !== profile.pin) {
+      toast.error("Current PIN is incorrect");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        pin: pinForm.newPin
+      });
+      toast.success("PIN updated successfully!");
+      setIsChangingPin(false);
+      setPinForm({ currentPin: '', newPin: '', confirmPin: '' });
+    } catch (error) {
+      toast.error("Failed to update PIN");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleUpgrade = async (plan: 'monthly' | 'yearly') => {
-    const amount = plan === 'monthly' ? (profile?.currency === '₹' ? 99 : 17) : (profile?.currency === '₹' ? 999 : 123);
+    if (!config) return;
+
+    const amount = plan === 'monthly' ? config.proPriceMonthly : config.proPriceYearly;
     const currency = profile?.currency === '₹' ? 'INR' : 'USD';
 
     toast.loading("Creating order...");
@@ -202,9 +247,9 @@ export default function Profile() {
             <h2 className="text-lg md:text-xl font-bold text-white truncate">{profile?.name || profile?.email}</h2>
             <p className="text-white/40 text-xs md:text-sm">
               {profile?.isPro ? 'Pro Account' : 'Free Account'}
-              {profile?.proUntil && (
+              {profile?.proExpiryDate && (
                 <span className="block text-[10px] opacity-60">
-                  Valid until: {profile.proUntil.toDate().toLocaleDateString()}
+                  Valid until: {profile.proExpiryDate.toDate().toLocaleDateString()}
                 </span>
               )}
             </p>
@@ -252,6 +297,84 @@ export default function Profile() {
         </div>
       </section>
 
+      {/* Security Section */}
+      <section className="bg-zinc-900/50 border border-white/10 p-5 md:p-8 rounded-2xl md:rounded-[32px] mb-6 md:mb-8 shadow-2xl">
+        <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-white">
+          <div className="text-purple-500">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div> 
+          Security
+        </h3>
+        
+        {!isChangingPin ? (
+          <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+            <div>
+              <p className="text-sm font-bold text-white">Vault PIN</p>
+              <p className="text-xs text-white/40">Change your 4-digit access PIN</p>
+            </div>
+            <button 
+              onClick={() => setIsChangingPin(true)}
+              className="px-4 py-2 bg-purple-600/20 text-purple-400 rounded-xl text-xs font-bold hover:bg-purple-600/30 transition-all"
+            >
+              Change PIN
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1.5 ml-1">Current PIN</label>
+              <input 
+                type="password"
+                maxLength={4}
+                value={pinForm.currentPin}
+                onChange={(e) => setPinForm({...pinForm, currentPin: e.target.value.replace(/\D/g, '')})}
+                placeholder="••••"
+                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white text-center tracking-[1em] focus:outline-none focus:ring-1 focus:ring-purple-500"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1.5 ml-1">New PIN</label>
+                <input 
+                  type="password"
+                  maxLength={4}
+                  value={pinForm.newPin}
+                  onChange={(e) => setPinForm({...pinForm, newPin: e.target.value.replace(/\D/g, '')})}
+                  placeholder="••••"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white text-center tracking-[1em] focus:outline-none focus:ring-1 focus:ring-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1.5 ml-1">Confirm PIN</label>
+                <input 
+                  type="password"
+                  maxLength={4}
+                  value={pinForm.confirmPin}
+                  onChange={(e) => setPinForm({...pinForm, confirmPin: e.target.value.replace(/\D/g, '')})}
+                  placeholder="••••"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white text-center tracking-[1em] focus:outline-none focus:ring-1 focus:ring-purple-500"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button 
+                onClick={() => setIsChangingPin(false)}
+                className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white/60 rounded-xl font-bold text-sm transition-all"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleUpdatePin}
+                disabled={loading || pinForm.newPin.length !== 4}
+                className="flex-2 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-bold text-sm transition-all disabled:opacity-50"
+              >
+                {loading ? "Updating..." : "Update PIN"}
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
       {/* Upgrade Section */}
       {!profile?.isPro && (
         <section className="mb-8">
@@ -262,10 +385,17 @@ export default function Profile() {
             <div className="bg-zinc-900/50 border border-white/10 p-6 rounded-3xl flex flex-col justify-between">
               <div>
                 <h4 className="text-lg font-bold text-white">Monthly</h4>
-                <p className="text-3xl font-bold mt-2 text-white">
-                  {profile?.currency === '₹' ? '₹99' : '$17'}
-                  <span className="text-sm text-white/40 font-normal">/mo</span>
-                </p>
+                <div className="mt-2">
+                  {config?.proPriceMonthlyOld && (
+                    <span className="text-sm text-white/20 line-through mr-2">
+                      {profile?.currency}{config.proPriceMonthlyOld}
+                    </span>
+                  )}
+                  <p className="text-3xl font-bold text-white inline-block">
+                    {profile?.currency}{config?.proPriceMonthly || (profile?.currency === '₹' ? '99' : '17')}
+                    <span className="text-sm text-white/40 font-normal">/mo</span>
+                  </p>
+                </div>
               </div>
               <button 
                 onClick={() => handleUpgrade('monthly')}
@@ -278,10 +408,17 @@ export default function Profile() {
               <div className="absolute top-0 right-0 bg-purple-600 text-[10px] font-bold px-3 py-1 rounded-bl-xl uppercase tracking-widest text-white">Best Value</div>
               <div>
                 <h4 className="text-lg font-bold text-white">Yearly</h4>
-                <p className="text-3xl font-bold mt-2 text-white">
-                  {profile?.currency === '₹' ? '₹999' : '$123'}
-                  <span className="text-sm text-white/40 font-normal">/yr</span>
-                </p>
+                <div className="mt-2">
+                  {config?.proPriceYearlyOld && (
+                    <span className="text-sm text-white/20 line-through mr-2">
+                      {profile?.currency}{config.proPriceYearlyOld}
+                    </span>
+                  )}
+                  <p className="text-3xl font-bold text-white inline-block">
+                    {profile?.currency}{config?.proPriceYearly || (profile?.currency === '₹' ? '999' : '123')}
+                    <span className="text-sm text-white/40 font-normal">/yr</span>
+                  </p>
+                </div>
               </div>
               <button 
                 onClick={() => handleUpgrade('yearly')}
@@ -293,7 +430,7 @@ export default function Profile() {
           </div>
 
           {/* Admin Simulation Button */}
-          {profile?.email === "krishnaprayers108@gmail.com" && (
+          {profile?.isAdmin && (
             <div className="mt-6">
               <button 
                 onClick={handleSimulatePayment}

@@ -12,9 +12,22 @@
         "currency": { "type": "string", "description": "User's preferred currency (₹ or $)" },
         "isPro": { "type": "boolean", "description": "Whether the user has a pro subscription" },
         "isAdmin": { "type": "boolean", "description": "Whether the user is an administrator" },
-        "trialStartDate": { "type": "string", "format": "date-time", "description": "When the user started their free trial" }
+        "trialStartDate": { "type": "string", "format": "date-time", "description": "When the user started their free trial" },
+        "proExpiryDate": { "type": "string", "format": "date-time", "description": "When the pro subscription expires" }
       },
       "required": ["uid", "email", "trialStartDate"]
+    },
+    "Config": {
+      "title": "Config",
+      "description": "Global application configuration",
+      "type": "object",
+      "properties": {
+        "proPriceMonthly": { "type": "number", "description": "Monthly Pro price" },
+        "proPriceYearly": { "type": "number", "description": "Yearly Pro price" },
+        "proPriceMonthlyOld": { "type": "number", "description": "Old monthly Pro price" },
+        "proPriceYearlyOld": { "type": "number", "description": "Old yearly Pro price" }
+      },
+      "required": ["proPriceMonthly", "proPriceYearly"]
     },
     "Subscription": {
       "title": "Subscription",
@@ -74,6 +87,10 @@
     "/messages/{messageId}": {
       "schema": "Message",
       "description": "User messages to admin"
+    },
+    "/config/{configId}": {
+      "schema": "Config",
+      "description": "Global application configuration"
     }
   }
 }

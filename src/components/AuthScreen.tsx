@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { auth, db, doc, setDoc, getDoc, Timestamp, addDoc, collection, updateDoc, GoogleAuthProvider, signInWithPopup } from '../firebase';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { auth, db, doc, setDoc, getDoc, Timestamp, addDoc, collection, updateDoc, GoogleAuthProvider, signInWithPopup, query, where, getDocs, onSnapshot, deleteDoc } from '../firebase';
+import { signInAnonymously } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthProvider';
 import { toast } from 'sonner';
@@ -31,6 +31,23 @@ export function AuthForm() {
   const [step, setStep] = useState(email ? 'pin' : 'email');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  const [resetStatus, setResetStatus] = useState<{ status: string, tempPin?: string } | null>(null);
+
+  useEffect(() => {
+    if (step === 'pin' && email) {
+      const q = query(collection(db, 'ResetRequests'), where('email', '==', email), where('status', '==', 'resolved'));
+      const unsub = onSnapshot(q, (snap) => {
+        if (!snap.empty) {
+          const data = snap.docs[0].data();
+          setResetStatus({ status: 'resolved', tempPin: data.tempPin });
+        } else {
+          setResetStatus(null);
+        }
+      });
+      return () => unsub();
+    }
+  }, [step, email]);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -73,79 +90,96 @@ export function AuthForm() {
       return;
     }
     setLoading(true);
-    setStep('pin');
-    setLoading(false);
+    try {
+      if (!auth.currentUser) {
+        await signInAnonymously(auth);
+      }
+      setStep('pin');
+    } catch (error) {
+      console.error("Anonymous Signin Error:", error);
+      toast.error("Failed to connect to server");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handlePinSubmit = async (finalPin: string) => {
     if (finalPin.length !== 4) return;
     setLoading(true);
-    const password = finalPin + SECRET_SUFFIX;
     
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
+      // 1. Fetch user profile from Firestore
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('email', '==', email));
+      const querySnap = await getDocs(q);
       
-      if (email === "krishnaprayers108@gmail.com") {
-        const profileRef = doc(db, 'users', user.uid);
-        try {
-          const profileSnap = await getDoc(profileRef);
-          if (profileSnap.exists()) {
-            const data = profileSnap.data();
-            if (!data.isAdmin) {
-              await updateDoc(profileRef, { isAdmin: true }).catch(() => {});
-            }
-          } else {
-            await setDoc(profileRef, {
-              uid: user.uid,
-              email: email,
-              name: email.split('@')[0],
-              trialStartDate: Timestamp.now(),
-              isPro: false,
-              isAdmin: true,
-              currency: '$'
-            });
-          }
-        } catch (err) {
-          console.warn("Admin check failed:", err);
-        }
+      let userData: any = null;
+      let userUid: string = '';
+
+      if (!querySnap.empty) {
+        const userDoc = querySnap.docs[0];
+        userData = userDoc.data();
+        userUid = userDoc.id;
       }
 
-      localStorage.setItem('mysubs_email', email);
-      toast.success("Welcome back!");
-      setUnlocked(true);
-      navigate('/dashboard');
-    } catch (error: any) {
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
-        try {
-          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-          const user = userCredential.user;
-          
-          await setDoc(doc(db, 'users', user.uid), {
-            uid: user.uid,
-            email: email,
-            name: email.split('@')[0],
-            trialStartDate: Timestamp.now(),
-            isPro: false,
-            isAdmin: email === "krishnaprayers108@gmail.com",
-            currency: '$'
+      // 2. Validate PIN (Check both permanent and temporary PIN)
+      const isValidPin = userData && (userData.pin === finalPin || (userData.resetApproved && userData.tempPin === finalPin));
+
+      if (isValidPin) {
+        // If it was a tempPin, clear it and set as permanent
+        if (userData.tempPin === finalPin) {
+          await updateDoc(doc(db, 'users', userUid), {
+            pin: finalPin,
+            tempPin: null,
+            resetApproved: false
           });
           
-          localStorage.setItem('mysubs_email', email);
-          toast.success("Account created!");
-          setUnlocked(true);
-          navigate('/dashboard');
-        } catch (createError: any) {
-          if (createError.code === 'auth/email-already-in-use') {
-            toast.error("Incorrect PIN");
-            setPin('');
-          } else {
-            toast.error(createError.message);
-          }
+          // Delete the reset request so it doesn't show on login screen anymore
+          const resetQ = query(collection(db, 'ResetRequests'), where('email', '==', email));
+          const resetSnap = await getDocs(resetQ);
+          resetSnap.forEach(async (d) => {
+            await deleteDoc(doc(db, 'ResetRequests', d.id));
+          });
         }
+
+        // 3. Authenticate with Firebase Auth (Anonymously if not already logged in)
+        if (!auth.currentUser) {
+          await signInAnonymously(auth);
+        }
+
+        localStorage.setItem('mysubs_email', email);
+        toast.success("Welcome back!");
+        setUnlocked(true);
+        navigate('/dashboard');
+      } else if (!userData) {
+        // 4. New User Flow: Create profile and Auth account
+        if (!auth.currentUser) {
+          await signInAnonymously(auth);
+        }
+        
+        const newUserUid = auth.currentUser?.uid || `user_${Date.now()}`;
+        await setDoc(doc(db, 'users', newUserUid), {
+          uid: newUserUid,
+          email: email,
+          name: email.split('@')[0],
+          pin: finalPin,
+          trialStartDate: Timestamp.now(),
+          isPro: false,
+          isAdmin: email === "krishnaprayers108@gmail.com",
+          currency: '$'
+        });
+
+        localStorage.setItem('mysubs_email', email);
+        toast.success("Vault created!");
+        setUnlocked(true);
+        navigate('/dashboard');
       } else {
-        toast.error(error.message);
+        toast.error("Incorrect PIN");
+        setPin('');
       }
+    } catch (error: any) {
+      console.error("Auth Error:", error);
+      toast.error(error.message || "Authentication failed");
     } finally {
       setLoading(false);
     }
@@ -229,6 +263,15 @@ export function AuthForm() {
           <div className="mb-8 text-center">
             <p className="text-white/60 mb-2">Enter PIN for</p>
             <p className="text-white font-medium">{email}</p>
+            
+            {resetStatus && (
+              <div className="mt-4 p-4 bg-purple-500/20 border border-purple-500/30 rounded-2xl animate-pulse">
+                <p className="text-xs text-purple-300 font-bold uppercase tracking-widest mb-1">Reset Approved</p>
+                <p className="text-lg font-bold text-white mb-1">New PIN: {resetStatus.tempPin}</p>
+                <p className="text-[10px] text-white/60">Enter this PIN below to regain access.</p>
+              </div>
+            )}
+
             <button 
               onClick={() => { setStep('email'); setPin(''); }}
               className="text-purple-500 text-xs mt-2 hover:underline"

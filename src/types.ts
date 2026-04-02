@@ -7,9 +7,20 @@ export interface UserProfile {
   country?: string;
   currency?: '₹' | '$';
   isPro?: boolean;
-  proUntil?: Timestamp;
+  proExpiryDate?: Timestamp;
   isAdmin?: boolean;
   trialStartDate: Timestamp;
+  pin: string;
+  tempPin?: string | null;
+  resetApproved?: boolean;
+}
+
+export interface Config {
+  id: string;
+  proPriceMonthly: number;
+  proPriceYearly: number;
+  proPriceMonthlyOld?: number;
+  proPriceYearlyOld?: number;
 }
 
 export interface Subscription {
@@ -29,6 +40,9 @@ export interface ResetRequest {
   id: string;
   email: string;
   requestedAt: Timestamp;
+  status?: 'pending' | 'resolved' | 'denied';
+  tempPin?: string;
+  resolvedAt?: Timestamp;
 }
 
 export interface Message {

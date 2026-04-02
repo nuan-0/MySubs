@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db, collection, query, onSnapshot, doc, deleteDoc, Timestamp, auth, updateDoc } from '../firebase';
+import { db, collection, query, onSnapshot, doc, deleteDoc, Timestamp, auth, updateDoc, setDoc } from '../firebase';
 import { useAuth } from './AuthProvider';
-import { UserProfile, ResetRequest, Message } from '../types';
+import { UserProfile, ResetRequest, Message, Config } from '../types';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import confetti from 'canvas-confetti';
@@ -34,6 +34,18 @@ const Icons = {
   ),
   Check: () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+  ),
+  Search: () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+  ),
+  Calendar: () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+  ),
+  Tag: () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+  ),
+  Trophy: () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
   )
 };
 
@@ -42,11 +54,22 @@ export default function AdminVault() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [requests, setRequests] = useState<ResetRequest[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [config, setConfig] = useState<Config | null>(null);
   const [newPin, setNewPin] = useState('');
   const [selectedEmail, setSelectedEmail] = useState('');
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [adminReply, setAdminReply] = useState('');
   const [loading, setLoading] = useState(false);
+  const [proSearchEmail, setProSearchEmail] = useState('');
+  const [foundUser, setFoundUser] = useState<UserProfile | null>(null);
+  const [proDuration, setProDuration] = useState<'month' | 'year' | 'custom'>('month');
+  const [customDate, setCustomDate] = useState('');
+  const [pricingForm, setPricingForm] = useState({
+    monthly: '',
+    yearly: '',
+    monthlyOld: '',
+    yearlyOld: ''
+  });
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -68,10 +91,23 @@ export default function AdminVault() {
       console.error("Admin Messages Fetch Error:", error);
       toast.error("Access Denied to Messages");
     });
+    const unsubConfig = onSnapshot(doc(db, 'config', 'pricing'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data() as Config;
+        setConfig(data);
+        setPricingForm({
+          monthly: data.proPriceMonthly.toString(),
+          yearly: data.proPriceYearly.toString(),
+          monthlyOld: data.proPriceMonthlyOld?.toString() || '',
+          yearlyOld: data.proPriceYearlyOld?.toString() || ''
+        });
+      }
+    });
     return () => {
       unsubUsers();
       unsubRequests();
       unsubMessages();
+      unsubConfig();
     };
   }, []);
 
@@ -106,32 +142,35 @@ export default function AdminVault() {
     }
     setLoading(true);
     try {
-      const idToken = await auth.currentUser?.getIdToken();
-      const response = await fetch('/api/admin/reset-pin', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`
-        },
-        body: JSON.stringify({
-          email: selectedEmail,
-          newPin
-        })
-      });
-      
-      if (response.ok) {
-        const req = requests.find(r => r.email === selectedEmail);
-        if (req) await deleteDoc(doc(db, 'ResetRequests', req.id));
-        
-        toast.success(`PIN reset for ${selectedEmail}`);
-        setNewPin('');
-        setSelectedEmail('');
-      } else {
-        const err = await response.json();
-        toast.error(err.error || "Failed to reset PIN");
+      // Find user by email
+      const userToUpdate = users.find(u => u.email === selectedEmail);
+      if (!userToUpdate) {
+        toast.error("User not found in database");
+        return;
       }
+
+      // Update user document with temporary PIN and reset flag
+      await updateDoc(doc(db, 'users', userToUpdate.uid), {
+        tempPin: newPin,
+        resetApproved: true
+      });
+
+      // Resolve the request
+      const request = requests.find(r => r.email === selectedEmail);
+      if (request) {
+        await updateDoc(doc(db, 'ResetRequests', request.id), {
+          status: 'resolved',
+          tempPin: newPin, // Store tempPin so user can see it on login screen
+          resolvedAt: Timestamp.now()
+        });
+      }
+
+      toast.success(`PIN Reset Approved! Temporary PIN: ${newPin}`);
+      setNewPin('');
+      setSelectedEmail('');
     } catch (error) {
-      toast.error("Server error. Ensure Firebase Admin is configured.");
+      console.error("Reset PIN Error:", error);
+      toast.error("Failed to reset PIN");
     } finally {
       setLoading(false);
     }
@@ -150,6 +189,60 @@ export default function AdminVault() {
       setSelectedMessage(null);
     } catch (error) {
       toast.error("Failed to send reply");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdatePricing = async () => {
+    setLoading(true);
+    try {
+      await setDoc(doc(db, 'config', 'pricing'), {
+        proPriceMonthly: parseFloat(pricingForm.monthly),
+        proPriceYearly: parseFloat(pricingForm.yearly),
+        proPriceMonthlyOld: pricingForm.monthlyOld ? parseFloat(pricingForm.monthlyOld) : null,
+        proPriceYearlyOld: pricingForm.yearlyOld ? parseFloat(pricingForm.yearlyOld) : null
+      }, { merge: true });
+      toast.success("Pricing updated!");
+    } catch (error) {
+      toast.error("Failed to update pricing");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearchUser = () => {
+    const user = users.find(u => u.email.toLowerCase() === proSearchEmail.toLowerCase());
+    if (user) {
+      setFoundUser(user);
+    } else {
+      toast.error("User not found");
+      setFoundUser(null);
+    }
+  };
+
+  const handleGrantPro = async () => {
+    if (!foundUser) return;
+    setLoading(true);
+    try {
+      let expiryDate = new Date();
+      if (proDuration === 'month') {
+        expiryDate.setMonth(expiryDate.getMonth() + 1);
+      } else if (proDuration === 'year') {
+        expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+      } else if (customDate) {
+        expiryDate = new Date(customDate);
+      }
+
+      await updateDoc(doc(db, 'users', foundUser.uid), {
+        isPro: true,
+        proExpiryDate: Timestamp.fromDate(expiryDate)
+      });
+      toast.success(`Pro status granted to ${foundUser.email} until ${expiryDate.toLocaleDateString()}`);
+      setFoundUser(null);
+      setProSearchEmail('');
+    } catch (error) {
+      toast.error("Failed to grant Pro status");
     } finally {
       setLoading(false);
     }
@@ -189,6 +282,123 @@ export default function AdminVault() {
           </div>
           <p className="text-2xl md:text-4xl font-bold text-white">{formatCurrency(stats.revenue)}</p>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+        {/* Pricing Management */}
+        <section className="bg-zinc-900/50 border border-white/10 p-6 md:p-8 rounded-[40px] shadow-2xl">
+          <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-white">
+            <div className="text-purple-500"><Icons.Tag /></div> Pricing Management
+          </h2>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-[10px] uppercase font-bold text-white/40 mb-1 block">Monthly Price</label>
+                <input 
+                  type="number"
+                  value={pricingForm.monthly}
+                  onChange={(e) => setPricingForm({...pricingForm, monthly: e.target.value})}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase font-bold text-white/40 mb-1 block">Monthly Old</label>
+                <input 
+                  type="number"
+                  value={pricingForm.monthlyOld}
+                  onChange={(e) => setPricingForm({...pricingForm, monthlyOld: e.target.value})}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-[10px] uppercase font-bold text-white/40 mb-1 block">Yearly Price</label>
+                <input 
+                  type="number"
+                  value={pricingForm.yearly}
+                  onChange={(e) => setPricingForm({...pricingForm, yearly: e.target.value})}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase font-bold text-white/40 mb-1 block">Yearly Old</label>
+                <input 
+                  type="number"
+                  value={pricingForm.yearlyOld}
+                  onChange={(e) => setPricingForm({...pricingForm, yearlyOld: e.target.value})}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                />
+              </div>
+            </div>
+            <button 
+              onClick={handleUpdatePricing}
+              disabled={loading}
+              className="w-full bg-purple-600 hover:bg-purple-500 text-white py-3 rounded-xl font-bold transition-all disabled:opacity-50"
+            >
+              {loading ? "Updating..." : "Update Pricing"}
+            </button>
+          </div>
+        </section>
+
+        {/* Grant Pro Access */}
+        <section className="bg-zinc-900/50 border border-white/10 p-6 md:p-8 rounded-[40px] shadow-2xl">
+          <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-white">
+            <div className="text-purple-500"><Icons.Trophy /></div> Grant Pro Access
+          </h2>
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <input 
+                type="email"
+                placeholder="User Email"
+                value={proSearchEmail}
+                onChange={(e) => setProSearchEmail(e.target.value)}
+                className="flex-1 bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+              />
+              <button 
+                onClick={handleSearchUser}
+                className="p-3 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all"
+              >
+                <Icons.Search />
+              </button>
+            </div>
+
+            {foundUser && (
+              <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-2xl animate-in fade-in slide-in-from-top-2">
+                <p className="text-sm font-bold text-white mb-3">User: {foundUser.email}</p>
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                  {(['month', 'year', 'custom'] as const).map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setProDuration(d)}
+                      className={cn(
+                        "py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest border transition-all",
+                        proDuration === d ? "bg-purple-600 border-purple-500 text-white" : "bg-white/5 border-white/10 text-white/40"
+                      )}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+                {proDuration === 'custom' && (
+                  <input 
+                    type="date"
+                    value={customDate}
+                    onChange={(e) => setCustomDate(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white mb-4 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  />
+                )}
+                <button 
+                  onClick={handleGrantPro}
+                  disabled={loading}
+                  className="w-full bg-purple-600 hover:bg-purple-500 text-white py-3 rounded-xl font-bold transition-all disabled:opacity-50"
+                >
+                  {loading ? "Granting..." : "Confirm Pro Status"}
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
       </div>
 
       {/* Reset Requests */}

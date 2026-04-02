@@ -14,9 +14,20 @@ service cloud.firestore {
     //   - country: string (optional)
     //   - currency: string (optional, ₹ or $)
     //   - isPro: boolean (optional)
-    //   - proUntil: timestamp (optional)
+    //   - proExpiryDate: timestamp (optional)
     //   - isAdmin: boolean (optional)
     //   - trialStartDate: timestamp (required)
+    //   - pin: string (required)
+    //   - tempPin: string (optional)
+    //   - resetApproved: boolean (optional)
+    //
+    // Collection: config
+    // Document ID: configId (e.g., 'pricing')
+    // Fields:
+    //   - proPriceMonthly: number (required)
+    //   - proPriceYearly: number (required)
+    //   - proPriceMonthlyOld: number (optional)
+    //   - proPriceYearlyOld: number (optional)
     //
     // Collection: subscriptions
     // Document ID: subId (auto-generated)
@@ -75,8 +86,8 @@ service cloud.firestore {
 
     function isValidUser(data) {
       return data.keys().hasAll(['uid', 'email', 'trialStartDate']) &&
-             data.keys().hasOnly(['uid', 'email', 'trialStartDate', 'name', 'isPro', 'proUntil', 'isAdmin', 'currency', 'country']) &&
-             data.uid == request.auth.uid &&
+             data.keys().hasOnly(['uid', 'email', 'trialStartDate', 'name', 'isPro', 'proExpiryDate', 'isAdmin', 'currency', 'country', 'pin', 'tempPin', 'resetApproved']) &&
+             (isAdmin() || data.uid == request.auth.uid) &&
              isValidEmail(data.email) &&
              data.trialStartDate is timestamp;
     }
@@ -96,6 +107,7 @@ service cloud.firestore {
 
     function isValidResetRequest(data) {
       return data.keys().hasAll(['email', 'requestedAt']) &&
+             data.keys().hasOnly(['email', 'requestedAt', 'status', 'tempPin', 'resolvedAt']) &&
              isValidEmail(data.email) &&
              data.requestedAt is timestamp;
     }
@@ -135,11 +147,22 @@ service cloud.firestore {
                         isAdmin()
                       ) &&
                       (
-                        !('proUntil' in request.resource.data) || 
-                        request.resource.data.proUntil == resource.data.get('proUntil', null) || 
+                        !('proExpiryDate' in request.resource.data) || 
+                        request.resource.data.proExpiryDate == resource.data.get('proExpiryDate', null) || 
                         isAdmin()
                       ) &&
-                      (request.resource.data.email == resource.data.email); // Email immutable
+                      (isAdmin() || request.resource.data.email == resource.data.email); // Email immutable for users
+      
+      // Allow anonymous users to update their profile IF they have the correct tempPin (Reset Flow)
+      // This is a bit tricky to enforce strictly in rules without a custom claim, 
+      // but we can allow it if the email matches and they are authenticated.
+      // For now, the above 'isOwner' covers it if they are already logged in.
+      // If they are anonymous, they are the 'owner' of their anonymous UID.
+    }
+
+    match /config/{configId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     match /subscriptions/{subId} {
@@ -151,7 +174,8 @@ service cloud.firestore {
 
     match /ResetRequests/{requestId} {
       allow create: if isValidResetRequest(request.resource.data);
-      allow read, delete: if isAdmin();
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.email == request.auth.token.email) || (isAuthenticated() && resource.data.status == 'resolved');
+      allow delete, update: if isAdmin();
     }
 
     match /messages/{messageId} {

@@ -48,12 +48,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setProfile(data);
 
         // Auto-upgrade admin account to Pro until 2099
-        if (user.email === ADMIN_EMAIL && (!data.isPro || !data.proUntil)) {
-          const proUntilDate = new Date(2099, 11, 31); // Dec 31, 2099
+        if (user.email === ADMIN_EMAIL && (!data.isPro || !data.proExpiryDate)) {
+          const proExpiryDate = new Date(2099, 11, 31); // Dec 31, 2099
           updateDoc(profileRef, {
             isPro: true,
             isAdmin: true,
-            proUntil: Timestamp.fromDate(proUntilDate)
+            proExpiryDate: Timestamp.fromDate(proExpiryDate)
           }).catch(err => console.error("Admin auto-upgrade failed:", err));
         }
       } else {

@@ -189,6 +189,9 @@ const Icons = {
   ),
   Check: () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+  ),
+  Refresh: () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
   )
 };
 
@@ -228,8 +231,18 @@ export default function Dashboard() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setUserMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
+
+    // Pro expiration check
+    if (profile?.isPro && profile.proExpiryDate) {
+      const expiry = profile.proExpiryDate.toDate();
+      if (expiry < new Date()) {
+        updateDoc(doc(db, 'users', user.uid), {
+          isPro: false
+        }).catch(err => console.error("Failed to expire Pro:", err));
+      }
+    }
     return () => unsubscribe();
-  }, [user]);
+  }, [user, profile]);
 
   useEffect(() => {
     const saved = localStorage.getItem('mysubs_total_saved') || '0';
@@ -285,17 +298,17 @@ export default function Dashboard() {
     try {
       await deleteDoc(doc(db, 'subscriptions', sub.id));
       
-      const currentSaved = parseFloat(localStorage.getItem('mysubs_total_saved') || '0');
-      const newSaved = currentSaved + sub.price;
-      localStorage.setItem('mysubs_total_saved', newSaved.toString());
-      setTotalSaved(newSaved);
-
-      // Only celebrate if the user kept the subscription for at least 3 days
+      // Only count as savings and celebrate if the user kept the subscription for at least 3 days
       const createdAt = sub.createdAt?.toDate() || new Date(0); // Fallback for old subs
       const now = new Date();
       const diffDays = Math.ceil((now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
 
       if (diffDays >= 3) {
+        const currentSaved = parseFloat(localStorage.getItem('mysubs_total_saved') || '0');
+        const newSaved = currentSaved + sub.price;
+        localStorage.setItem('mysubs_total_saved', newSaved.toString());
+        setTotalSaved(newSaved);
+
         confetti({
           particleCount: 150,
           spread: 70,
@@ -308,7 +321,7 @@ export default function Dashboard() {
         });
       } else {
         toast.success("Subscription removed.", {
-          description: "No celebration for instant deletes! Keep it longer to see the magic. ✨"
+          description: "No savings recorded for instant deletes! Keep it longer to see the magic. ✨"
         });
       }
     } catch (error: any) {
@@ -326,6 +339,22 @@ export default function Dashboard() {
   const notifications = useMemo(() => {
     const list = [];
     
+    // Pro expiration notification
+    if (profile?.isPro && profile.proExpiryDate) {
+      const expiry = profile.proExpiryDate.toDate();
+      const now = new Date();
+      const diffDays = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (diffDays <= 3 && diffDays > 0) {
+        list.push({
+          id: 'pro-expiring',
+          title: 'Pro Expiring Soon',
+          message: `Your Pro status expires in ${diffDays} day(s). Renew now to keep your benefits!`,
+          type: 'warning'
+        });
+      }
+    }
+
     // Trial notification
     if (profile?.trialStartDate && !profile.isPro) {
       const trialStart = profile.trialStartDate.toDate();
@@ -422,6 +451,14 @@ export default function Dashboard() {
       toast.success("Marked as read");
     } catch (error) {
       toast.error("Failed to update message status");
+    }
+  };
+
+  const handleResetData = () => {
+    if (confirm("Are you sure you want to reset your savings stats? This will not affect your subscriptions.")) {
+      localStorage.removeItem('mysubs_total_saved');
+      setTotalSaved(0);
+      toast.success("Stats reset to zero!");
     }
   };
 
@@ -620,6 +657,13 @@ export default function Dashboard() {
           <h2 className="text-xl md:text-4xl font-bold tracking-tighter text-green-400">
             {formatCurrency(totalSaved, profile?.currency)}
           </h2>
+          <button 
+            onClick={handleResetData}
+            className="absolute bottom-2 right-2 p-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-white/20 hover:text-white/60 transition-all"
+            title="Reset Stats"
+          >
+            <Icons.Refresh />
+          </button>
         </div>
       </div>
 
