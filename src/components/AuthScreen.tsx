@@ -48,6 +48,7 @@ export function AuthForm() {
   const [email, setEmail] = useState(localStorage.getItem('mysubs_email') || '');
   const [pin, setPin] = useState('');
   const [step, setStep] = useState(email ? 'pin' : 'email');
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [isNewUser, setIsNewUser] = useState(false);
   const [confirmPin, setConfirmPin] = useState('');
   const [isConfirming, setIsConfirming] = useState(false);
@@ -147,7 +148,21 @@ export function AuthForm() {
       const q = query(usersRef, where('email', '==', normalizedEmail));
       const querySnap = await getDocs(q);
       
-      setIsNewUser(querySnap.empty);
+      const exists = !querySnap.empty;
+
+      if (authMode === 'signup' && exists) {
+        toast.error("An account with this email already exists. Please login instead.");
+        setLoading(false);
+        return;
+      }
+
+      if (authMode === 'login' && !exists) {
+        toast.error("No account found with this email. Please sign up instead.");
+        setLoading(false);
+        return;
+      }
+
+      setIsNewUser(!exists);
 
       if (normalizedEmail === "krishnaprayers108@gmail.com") {
         setShowMasterReset(true);
@@ -186,13 +201,26 @@ export function AuthForm() {
     setLoading(true);
     
     try {
-      // Ensure we have an anonymous session for security rules if not already done
+      // CRITICAL FIX: Ensure we have an anonymous session for security rules
+      // and wait for it to complete before proceeding to document creation.
       if (!auth.currentUser) {
         try {
-          await signInAnonymously(auth);
+          const userCredential = await signInAnonymously(auth);
+          if (!userCredential.user) {
+            throw new Error("Auth failed to return a user.");
+          }
+          // Wait a tiny bit for the auth state to propagate
+          await new Promise(resolve => setTimeout(resolve, 800));
         } catch (err) {
-          console.warn("Anonymous Auth failed in PIN step:", err);
+          console.error("Anonymous Auth failed in PIN step:", err);
+          throw new Error("Failed to establish secure session. Please check your internet connection.");
         }
+      }
+
+      // Re-check current user after potential sign-in
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error("Authentication session lost. Please try again.");
       }
 
       // 1. Fetch user profile from Firestore
@@ -224,8 +252,8 @@ export function AuthForm() {
 
       if (isValidPin) {
         // 3. Handle UID Mismatch (Claim the profile for current anonymous session)
-        const currentAuthUid = auth.currentUser?.uid;
-        if (currentAuthUid && userUid !== currentAuthUid) {
+        const currentAuthUid = currentUser.uid;
+        if (userUid !== currentAuthUid) {
           console.log("Migrating profile from", userUid, "to", currentAuthUid);
           
           // Create new doc with current UID
@@ -310,23 +338,13 @@ export function AuthForm() {
           }
         }
 
-        // 3. Authenticate with Firebase Auth (Anonymously if not already logged in)
-        if (!auth.currentUser) {
-          try {
-            await signInAnonymously(auth);
-          } catch (err) {
-            console.warn("Non-blocking Auth Error:", err);
-            // We don't throw here so the user can still access the app
-          }
-        }
-
         localStorage.setItem('mysubs_email', email);
         toast.success("Welcome back!");
         setUnlocked(true);
         navigate('/dashboard');
       } else if (!userData) {
         // 4. New User Flow: Create profile and Auth account
-        const newUserUid = auth.currentUser?.uid;
+        const newUserUid = currentUser.uid;
         if (!newUserUid) throw new Error("Authentication session lost. Please try again.");
 
         // Fetch default currency from config
@@ -480,6 +498,27 @@ export function AuthForm() {
 
       {step === 'email' ? (
         <div className="space-y-6">
+          <div className="flex p-1 bg-white/5 rounded-2xl border border-white/10">
+            <button 
+              onClick={() => setAuthMode('login')}
+              className={cn(
+                "flex-1 py-3 rounded-xl text-sm font-bold transition-all",
+                authMode === 'login' ? "bg-purple-600 text-white shadow-lg" : "text-white/40 hover:text-white/60"
+              )}
+            >
+              Login
+            </button>
+            <button 
+              onClick={() => setAuthMode('signup')}
+              className={cn(
+                "flex-1 py-3 rounded-xl text-sm font-bold transition-all",
+                authMode === 'signup' ? "bg-purple-600 text-white shadow-lg" : "text-white/40 hover:text-white/60"
+              )}
+            >
+              Sign Up
+            </button>
+          </div>
+
           <div className="mb-6">
             <label className="block text-sm font-medium text-white/60 mb-2">Email Address</label>
             <div className="relative">
