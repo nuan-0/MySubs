@@ -8,7 +8,7 @@ import {
   signInAnonymously,
   User as FirebaseUser 
 } from 'firebase/auth';
-import { getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, addDoc, Timestamp, getDocFromServer, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, addDoc, Timestamp, getDocFromServer, enableMultiTabIndexedDbPersistence, orderBy } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 if (!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey.includes('TODO')) {
@@ -48,7 +48,8 @@ export {
   addDoc, 
   Timestamp, 
   getDocFromServer,
-  GoogleAuthProvider
+  GoogleAuthProvider,
+  orderBy
 };
 
 export type { FirebaseUser };
@@ -113,7 +114,8 @@ export function handleFirebaseError(error: unknown, operationType: OperationType
   } else if (errorCode === 'auth/operation-not-allowed') {
     userMessage = "This sign-in method is disabled. Please enable it in the Firebase Console (Authentication > Sign-in method).";
   } else if (errorCode === 'auth/unauthorized-domain') {
-    userMessage = "This domain is not authorized for Firebase Authentication. Please add it to the 'Authorized domains' list in the Firebase Console.";
+    const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
+    userMessage = `This domain (${currentDomain}) is not authorized for Firebase Authentication. Please add it to the 'Authorized domains' list in the Firebase Console (Authentication > Settings > Authorized domains).`;
   }
   
   return new Error(userMessage);

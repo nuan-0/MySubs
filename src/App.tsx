@@ -10,6 +10,7 @@ import AuthScreen from './components/AuthScreen';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
 import Profile from './components/Profile';
+import AdminPanel from './components/AdminPanel';
 import TrialLock from './components/TrialLock';
 import { PrivacyPolicy, TermsOfService } from './components/Legal';
 import { Toaster } from 'sonner';
@@ -56,6 +57,13 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
+const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { profile, loading } = useAuth();
+  if (loading) return null;
+  if (!profile?.isAdmin) return <Navigate to="/" />;
+  return <>{children}</>;
+};
+
 const HomeRoute = () => {
   const { user, loading } = useAuth();
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-bg text-white">Loading...</div>;
@@ -73,6 +81,7 @@ export default function App() {
             <Route path="/" element={<HomeRoute />} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute><AdminRoute><AdminPanel /></AdminRoute></ProtectedRoute>} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsOfService />} />
             <Route path="*" element={<Navigate to="/" />} />

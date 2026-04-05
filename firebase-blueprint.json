@@ -56,7 +56,8 @@
         "content": { "type": "string", "description": "Message content" },
         "sentAt": { "type": "string", "format": "date-time", "description": "When the message was sent" },
         "status": { "type": "string", "enum": ["unread", "read", "replied"], "description": "Message status" },
-        "reply": { "type": "string", "description": "Admin's reply" }
+        "reply": { "type": "string", "description": "Admin's reply" },
+        "repliedAt": { "type": "string", "format": "date-time", "description": "When the admin replied" }
       },
       "required": ["uid", "email", "content", "sentAt", "status"]
     }

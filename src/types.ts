@@ -42,4 +42,5 @@ export interface Message {
   sentAt: Timestamp;
   status: 'unread' | 'read' | 'replied';
   reply?: string;
+  repliedAt?: Timestamp;
 }

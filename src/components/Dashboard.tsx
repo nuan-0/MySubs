@@ -625,6 +625,15 @@ export default function Dashboard() {
             </motion.div>
             <span className="hidden sm:inline text-xs font-bold text-white/60">Settings</span>
           </button>
+          {profile?.isAdmin && (
+            <button 
+              onClick={() => navigate('/admin')}
+              className="p-2 md:p-3 bg-white/5 border border-white/10 rounded-xl md:rounded-2xl hover:bg-white/10 transition-all text-purple-500"
+              title="Admin Panel"
+            >
+              <Icons.MessageSquare />
+            </button>
+          )}
           <button 
             onClick={() => setIsReachUsOpen(true)}
             className="p-2 md:p-3 bg-purple-600/20 border border-purple-500/30 rounded-xl md:rounded-2xl hover:bg-purple-600/30 transition-all text-purple-400 flex items-center gap-2"
