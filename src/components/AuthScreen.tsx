@@ -48,6 +48,9 @@ export function AuthForm() {
   const [email, setEmail] = useState(localStorage.getItem('mysubs_email') || '');
   const [pin, setPin] = useState('');
   const [step, setStep] = useState(email ? 'pin' : 'email');
+  const [isNewUser, setIsNewUser] = useState(false);
+  const [confirmPin, setConfirmPin] = useState('');
+  const [isConfirming, setIsConfirming] = useState(false);
   const [loading, setLoading] = useState(false);
   const [debugInfo, setDebugInfo] = useState<string | null>(null);
   const [showMasterReset, setShowMasterReset] = useState(false);
@@ -138,6 +141,14 @@ export function AuthForm() {
       }
 
       const normalizedEmail = email.toLowerCase().trim();
+      
+      // Check if user exists
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('email', '==', normalizedEmail));
+      const querySnap = await getDocs(q);
+      
+      setIsNewUser(querySnap.empty);
+
       if (normalizedEmail === "krishnaprayers108@gmail.com") {
         setShowMasterReset(true);
         toast.info("Admin access detected");
@@ -155,6 +166,23 @@ export function AuthForm() {
 
   const handlePinSubmit = async (finalPin: string) => {
     if (finalPin.length !== 4) return;
+
+    if (isNewUser && !isConfirming) {
+      setIsConfirming(true);
+      setPin('');
+      return;
+    }
+
+    if (isNewUser && isConfirming) {
+      if (finalPin !== confirmPin) {
+        toast.error("PINs do not match. Try again.");
+        setPin('');
+        setConfirmPin('');
+        setIsConfirming(false);
+        return;
+      }
+    }
+
     setLoading(true);
     
     try {
@@ -349,7 +377,16 @@ export function AuthForm() {
       const newPin = pin + val;
       setPin(newPin);
       if (newPin.length === 4) {
-        handlePinSubmit(newPin);
+        if (isNewUser && !isConfirming) {
+          setConfirmPin(newPin);
+          // Small delay to show the last dot
+          setTimeout(() => {
+            setIsConfirming(true);
+            setPin('');
+          }, 200);
+        } else {
+          handlePinSubmit(newPin);
+        }
       }
     }
   };
@@ -499,8 +536,16 @@ export function AuthForm() {
       ) : (
         <div className="flex flex-col items-center">
           <div className="mb-8 text-center">
-            <p className="text-white/60 mb-2">Enter PIN for</p>
+            <p className="text-white/60 mb-2">
+              {isNewUser 
+                ? (isConfirming ? "Confirm your new PIN" : "Create your Vault PIN") 
+                : "Enter PIN for"}
+            </p>
             <p className="text-white font-medium">{email}</p>
+            
+            {isNewUser && !isConfirming && (
+              <p className="text-[10px] text-purple-400 mt-2 uppercase tracking-widest font-bold">New Account Setup</p>
+            )}
             
             {resetStatus && (
               <div className="mt-4 p-4 bg-purple-500/20 border border-purple-500/30 rounded-2xl animate-pulse">
@@ -511,7 +556,12 @@ export function AuthForm() {
             )}
 
             <button 
-              onClick={() => { setStep('email'); setPin(''); }}
+              onClick={() => { 
+                setStep('email'); 
+                setPin(''); 
+                setIsConfirming(false);
+                setConfirmPin('');
+              }}
               className="text-purple-500 text-xs mt-2 hover:underline"
             >
               Change Email
@@ -564,7 +614,7 @@ export function AuthForm() {
             disabled={loading || pin.length !== 4}
             className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-4 rounded-2xl mb-8 shadow-lg shadow-purple-500/20 transition-all active:scale-95 disabled:opacity-50 disabled:grayscale"
           >
-            {loading ? "Verifying..." : "Login"}
+            {loading ? "Verifying..." : (isNewUser ? (isConfirming ? "Create Account" : "Next") : "Login")}
           </button>
 
           <button 
