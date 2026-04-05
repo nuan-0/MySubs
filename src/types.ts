@@ -34,9 +34,13 @@ export interface Subscription {
   billingCycle: 'monthly' | 'yearly';
   nextRenewal: Timestamp;
   createdAt: Timestamp;
-  category: 'Entertainment' | 'Productivity' | 'Utilities' | 'Food' | 'Health' | 'Other';
-  status: 'active' | 'paused';
+  category: string;
+  status: 'active' | 'paused' | 'buried';
   icon?: string;
+  isBuried?: boolean;
+  buriedAt?: Timestamp;
+  splitWith?: { name: string; amount: number }[];
+  cancelUrl?: string;
 }
 
 export interface Message {

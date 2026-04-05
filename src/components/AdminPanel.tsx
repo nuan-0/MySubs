@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db, collection, query, orderBy, onSnapshot, doc, updateDoc, setDoc, Timestamp } from '../firebase';
+import { db, collection, query, orderBy, onSnapshot, doc, updateDoc, setDoc, Timestamp, getDocs, where } from '../firebase';
 import { Message, Config, PricingConfig } from '../types';
 import { useAuth } from './AuthProvider';
 import { toast } from 'sonner';
@@ -32,7 +32,9 @@ export default function AdminPanel() {
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [replyContent, setReplyContent] = useState('');
   const [filter, setFilter] = useState<'all' | 'unread' | 'replied'>('all');
-  const [activeTab, setActiveTab] = useState<'messages' | 'pricing'>('messages');
+  const [activeTab, setActiveTab] = useState<'messages' | 'pricing' | 'users'>('messages');
+  const [userEmailSearch, setUserEmailSearch] = useState('');
+  const [searchingUser, setSearchingUser] = useState(false);
   const [pricingConfig, setPricingConfig] = useState<Config | null>(null);
   const [editingPricing, setEditingPricing] = useState<{
     currency: string;
@@ -112,6 +114,65 @@ export default function AdminPanel() {
     }
   };
 
+  const handleGrantPro = async () => {
+    if (!userEmailSearch.trim()) return;
+    setSearchingUser(true);
+    try {
+      const q = query(collection(db, 'users'), where('email', '==', userEmailSearch.trim().toLowerCase()));
+      const snap = await getDocs(q);
+      
+      if (snap.empty) {
+        toast.error("No user found with this email");
+        return;
+      }
+
+      const userDoc = snap.docs[0];
+      const expiryDate = new Date();
+      expiryDate.setFullYear(expiryDate.getFullYear() + 1); // Default to 1 year
+
+      await updateDoc(doc(db, 'users', userDoc.id), {
+        isPro: true,
+        proExpiryDate: Timestamp.fromDate(expiryDate)
+      });
+
+      toast.success(`Pro status granted to ${userEmailSearch}`);
+      setUserEmailSearch('');
+    } catch (error) {
+      console.error("Grant Pro Error:", error);
+      toast.error("Failed to grant Pro status");
+    } finally {
+      setSearchingUser(false);
+    }
+  };
+
+  const handleRemovePro = async () => {
+    if (!userEmailSearch.trim()) return;
+    setSearchingUser(true);
+    try {
+      const q = query(collection(db, 'users'), where('email', '==', userEmailSearch.trim().toLowerCase()));
+      const snap = await getDocs(q);
+      
+      if (snap.empty) {
+        toast.error("No user found with this email");
+        return;
+      }
+
+      const userDoc = snap.docs[0];
+      await updateDoc(doc(db, 'users', userDoc.id), {
+        isPro: false,
+        proExpiryDate: null
+      });
+
+      toast.success(`Pro status removed from ${userEmailSearch}`);
+      setUserEmailSearch('');
+    } catch (error) {
+      console.error("Remove Pro Error:", error);
+      toast.error("Failed to remove Pro status");
+    } finally {
+      setSearchingUser(false);
+    }
+  };
+
   const filteredMessages = messages.filter(m => {
     if (filter === 'unread') return m.status === 'unread';
     if (filter === 'replied') return m.status === 'replied';
@@ -151,6 +212,15 @@ export default function AdminPanel() {
               )}
             >
               Pricing
+            </button>
+            <button
+              onClick={() => setActiveTab('users')}
+              className={cn(
+                "px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all",
+                activeTab === 'users' ? "bg-purple-600 text-white shadow-lg shadow-purple-500/20" : "text-white/40 hover:text-white"
+              )}
+            >
+              Users
             </button>
           </div>
         </header>
@@ -241,7 +311,7 @@ export default function AdminPanel() {
               </AnimatePresence>
             </div>
           </>
-        ) : (
+        ) : activeTab === 'pricing' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {['INR', 'USD'].map((curr) => {
               const pricing = pricingConfig?.pricing?.[curr];
@@ -293,6 +363,43 @@ export default function AdminPanel() {
                 </div>
               );
             })}
+          </div>
+        ) : (
+          <div className="max-w-xl mx-auto">
+            <div className="bg-zinc-900/50 border border-white/10 p-8 rounded-[40px] shadow-2xl">
+              <h3 className="text-2xl font-bold text-white mb-2">Manage User Pro Status</h3>
+              <p className="text-white/40 text-sm mb-8">Enter a user's email to grant or remove Pro benefits instantly.</p>
+              
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-widest text-white/40 mb-2">User Email Address</label>
+                  <input 
+                    type="email"
+                    value={userEmailSearch}
+                    onChange={(e) => setUserEmailSearch(e.target.value)}
+                    placeholder="user@example.com"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <button 
+                    onClick={handleGrantPro}
+                    disabled={searchingUser || !userEmailSearch.trim()}
+                    className="flex-1 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-bold py-4 rounded-2xl transition-all active:scale-95"
+                  >
+                    {searchingUser ? "Processing..." : "Grant Pro"}
+                  </button>
+                  <button 
+                    onClick={handleRemovePro}
+                    disabled={searchingUser || !userEmailSearch.trim()}
+                    className="flex-1 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 text-white font-bold py-4 rounded-2xl transition-all active:scale-95"
+                  >
+                    Remove Pro
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>

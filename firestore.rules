@@ -42,9 +42,13 @@ service cloud.firestore {
     //   - billingCycle: string (required, 'monthly' or 'yearly')
     //   - nextRenewal: timestamp (required)
     //   - createdAt: timestamp (required)
-    //   - category: string (required, enum)
-    //   - status: string (required, 'active' or 'paused')
+    //   - category: string (required)
+    //   - status: string (required, 'active', 'paused', or 'buried')
     //   - icon: string (optional)
+    //   - isBuried: boolean (optional)
+    //   - buriedAt: timestamp (optional)
+    //   - splitWith: list (optional)
+    //   - cancelUrl: string (optional)
     //
     // Collection: messages
     // Document ID: messageId (auto-generated)
@@ -90,15 +94,15 @@ service cloud.firestore {
 
     function isValidSubscription(data) {
       return data.keys().hasAll(['uid', 'name', 'price', 'billingCycle', 'nextRenewal', 'createdAt', 'category', 'status']) &&
-             data.keys().hasOnly(['uid', 'name', 'price', 'billingCycle', 'nextRenewal', 'createdAt', 'category', 'status', 'icon']) &&
+             data.keys().hasOnly(['uid', 'name', 'price', 'billingCycle', 'nextRenewal', 'createdAt', 'category', 'status', 'icon', 'isBuried', 'buriedAt', 'splitWith', 'cancelUrl']) &&
              data.uid == request.auth.uid &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.price is number && data.price >= 0 &&
              data.billingCycle in ['monthly', 'yearly'] &&
              data.nextRenewal is timestamp &&
              data.createdAt is timestamp &&
-             data.category in ['Entertainment', 'Productivity', 'Utilities', 'Food', 'Health', 'Other'] &&
-             data.status in ['active', 'paused'];
+             data.category is string &&
+             data.status in ['active', 'paused', 'buried'];
     }
 
     function isValidMessage(data) {

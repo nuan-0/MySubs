@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import confetti from 'canvas-confetti';
 import { cn, formatCurrency } from '../lib/utils';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import InstallPrompt from './InstallPrompt';
 
 const POPULAR_SUBS = [
@@ -129,13 +129,36 @@ const POPULAR_SUBS = [
 
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 
-const CATEGORIES = ['Entertainment', 'Productivity', 'Utilities', 'Food', 'Health', 'Other'];
+const CATEGORIES = [
+  'Entertainment', 
+  'Productivity', 
+  'Utilities', 
+  'Food', 
+  'Health', 
+  'Medicines',
+  'Education',
+  'Shopping',
+  'Gaming',
+  'Transport',
+  'Finance',
+  'News',
+  'Lifestyle',
+  'Other'
+];
 const CATEGORY_COLORS: Record<string, string> = {
-  Entertainment: '#A855F7', // Lilac
+  Entertainment: '#A855F7', 
   Productivity: '#8B5CF6',
   Utilities: '#7C3AED',
   Food: '#6D28D9',
   Health: '#5B21B6',
+  Medicines: '#EC4899', // Pink
+  Education: '#F472B6', // Light Pink
+  Shopping: '#DB2777', // Deep Pink
+  Gaming: '#9333EA', // Purple
+  Transport: '#7E22CE', // Deep Purple
+  Finance: '#4F46E5', // Indigo
+  News: '#6366F1', // Light Indigo
+  Lifestyle: '#C084FC', // Light Purple
   Other: '#4C1D95'
 };
 
@@ -201,6 +224,7 @@ export default function Dashboard() {
   const [subs, setSubs] = useState<Subscription[]>([]);
   const [totalSaved, setTotalSaved] = useState(0);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingSub, setEditingSub] = useState<Subscription | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isReachUsOpen, setIsReachUsOpen] = useState(false);
   const [reachUsMessage, setReachUsMessage] = useState('');
@@ -210,11 +234,61 @@ export default function Dashboard() {
     price: '', 
     billingCycle: 'monthly', 
     icon: '📦',
-    category: 'Other' as any
+    category: 'Other' as any,
+    nextRenewalDate: new Date().toISOString().split('T')[0],
+    cancelUrl: '',
+    splitWith: [] as { name: string; amount: number }[]
   });
-  const [activeTab, setActiveTab] = useState<'subs' | 'analytics' | 'timeline'>('subs');
+  const [activeTab, setActiveTab] = useState<'subs' | 'analytics' | 'timeline' | 'graveyard'>('subs');
   const [selectedPopular, setSelectedPopular] = useState<any>(null);
+  const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
+  const [tempSplit, setTempSplit] = useState({ name: '', amount: '' });
   const navigate = useNavigate();
+
+  const buriedSubs = useMemo(() => subs.filter(s => s.status === 'buried'), [subs]);
+  const activeSubs = useMemo(() => subs.filter(s => s.status !== 'buried'), [subs]);
+
+  const totalBuriedSavings = useMemo(() => {
+    return buriedSubs.reduce((acc, sub) => {
+      if (!sub.buriedAt) return acc;
+      const buriedDate = sub.buriedAt.toDate();
+      const now = new Date();
+      const diffMonths = (now.getFullYear() - buriedDate.getFullYear()) * 12 + (now.getMonth() - buriedDate.getMonth());
+      const monthlyPrice = sub.billingCycle === 'monthly' ? sub.price : sub.price / 12;
+      return acc + (monthlyPrice * Math.max(0, diffMonths));
+    }, 0);
+  }, [buriedSubs]);
+
+  const smartAlerts = useMemo(() => {
+    const alerts: { title: string; message: string; type: 'warning' | 'info' }[] = [];
+    const categoryCounts: Record<string, number> = {};
+    
+    activeSubs.forEach(sub => {
+      categoryCounts[sub.category] = (categoryCounts[sub.category] || 0) + 1;
+    });
+
+    Object.entries(categoryCounts).forEach(([cat, count]) => {
+      if (count >= 3) {
+        alerts.push({
+          title: 'Category Overload',
+          message: `You have ${count} subscriptions in ${cat}. Consider consolidating!`,
+          type: 'warning'
+        });
+      }
+    });
+
+    // Check for specific duplicates (e.g., multiple music apps)
+    const musicApps = activeSubs.filter(s => s.category === 'Entertainment' && (s.name.toLowerCase().includes('spotify') || s.name.toLowerCase().includes('apple music') || s.name.toLowerCase().includes('youtube music')));
+    if (musicApps.length > 1) {
+      alerts.push({
+        title: 'Duplicate Service',
+        message: `You're paying for multiple music services. Do you need all of them?`,
+        type: 'info'
+      });
+    }
+
+    return alerts;
+  }, [activeSubs]);
 
   useEffect(() => {
     if (!user) return;
@@ -274,29 +348,62 @@ export default function Dashboard() {
     }
 
     try {
-      const nextRenewal = new Date();
-      if (newSub.billingCycle === 'monthly') {
-        nextRenewal.setMonth(nextRenewal.getMonth() + 1);
-      } else {
-        nextRenewal.setFullYear(nextRenewal.getFullYear() + 1);
-      }
+      const nextRenewal = new Date(newSub.nextRenewalDate);
+      nextRenewal.setHours(12, 0, 0, 0);
 
-      await addDoc(collection(db, 'subscriptions'), {
+      const subData = {
         uid: user.uid,
         name: newSub.name,
         price: parseFloat(newSub.price),
         billingCycle: newSub.billingCycle,
         nextRenewal: Timestamp.fromDate(nextRenewal),
-        createdAt: Timestamp.now(),
         category: newSub.category,
         status: 'active',
-        icon: newSub.icon
-      });
+        icon: newSub.icon,
+        cancelUrl: newSub.cancelUrl,
+        splitWith: newSub.splitWith
+      };
+
+      if (editingSub) {
+        await updateDoc(doc(db, 'subscriptions', editingSub.id), subData);
+        toast.success(`${newSub.name} updated!`);
+      } else {
+        await addDoc(collection(db, 'subscriptions'), {
+          ...subData,
+          createdAt: Timestamp.now(),
+        });
+        toast.success(`${newSub.name} added!`);
+      }
 
       closeAddModal();
-      toast.success(`${newSub.name} added!`);
     } catch (error: any) {
-      toast.error("Failed to add subscription");
+      toast.error(editingSub ? "Failed to update" : "Failed to add");
+    }
+  };
+
+  const handleBurySub = async (sub: Subscription) => {
+    try {
+      await updateDoc(doc(db, 'subscriptions', sub.id), {
+        status: 'buried',
+        buriedAt: Timestamp.now()
+      });
+      toast.success(`${sub.name} has been buried in the graveyard. 🪦`, {
+        description: "We'll track how much you save by not having it!"
+      });
+    } catch (error) {
+      toast.error("Failed to bury subscription");
+    }
+  };
+
+  const handleResurrectSub = async (sub: Subscription) => {
+    try {
+      await updateDoc(doc(db, 'subscriptions', sub.id), {
+        status: 'active',
+        buriedAt: null
+      });
+      toast.success(`${sub.name} has been resurrected! 🧟‍♂️`);
+    } catch (error) {
+      toast.error("Failed to resurrect subscription");
     }
   };
 
@@ -480,6 +587,24 @@ export default function Dashboard() {
     }
   };
 
+  const handleRenewSub = async (sub: Subscription) => {
+    try {
+      const nextRenewal = sub.nextRenewal.toDate();
+      if (sub.billingCycle === 'monthly') {
+        nextRenewal.setMonth(nextRenewal.getMonth() + 1);
+      } else {
+        nextRenewal.setFullYear(nextRenewal.getFullYear() + 1);
+      }
+
+      await updateDoc(doc(db, 'subscriptions', sub.id), {
+        nextRenewal: Timestamp.fromDate(nextRenewal)
+      });
+      toast.success(`${sub.name} renewed! Next billing: ${nextRenewal.toLocaleDateString()}`);
+    } catch (error) {
+      toast.error("Failed to renew subscription");
+    }
+  };
+
   const handleExportCSV = () => {
     const headers = ['Name', 'Price', 'Cycle', 'Category', 'Status', 'Next Renewal'];
     const rows = subs.map(s => [
@@ -524,8 +649,33 @@ export default function Dashboard() {
 
   const closeAddModal = () => {
     setIsAddModalOpen(false);
+    setEditingSub(null);
     setSelectedPopular(null);
-    setNewSub({ name: '', price: '', billingCycle: 'monthly', icon: '📦', category: 'Other' });
+    setNewSub({ 
+      name: '', 
+      price: '', 
+      billingCycle: 'monthly', 
+      icon: '📦', 
+      category: 'Other',
+      nextRenewalDate: new Date().toISOString().split('T')[0],
+      cancelUrl: '',
+      splitWith: []
+    });
+  };
+
+  const openEditModal = (sub: Subscription) => {
+    setEditingSub(sub);
+    setNewSub({
+      name: sub.name,
+      price: sub.price.toString(),
+      billingCycle: sub.billingCycle,
+      icon: sub.icon || '📦',
+      category: sub.category,
+      nextRenewalDate: sub.nextRenewal.toDate().toISOString().split('T')[0],
+      cancelUrl: sub.cancelUrl || '',
+      splitWith: sub.splitWith || []
+    });
+    setIsAddModalOpen(true);
   };
 
   return (
@@ -697,18 +847,46 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Smart Alerts */}
+      <AnimatePresence>
+        {smartAlerts.length > 0 && activeTab === 'subs' && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="mb-6 space-y-2 overflow-hidden"
+          >
+            {smartAlerts.map((alert, i) => (
+              <div key={i} className={cn(
+                "p-4 rounded-2xl border flex items-center gap-3",
+                alert.type === 'warning' ? "bg-yellow-500/10 border-yellow-500/30 text-yellow-500" : "bg-blue-500/10 border-blue-500/30 text-blue-400"
+              )}>
+                <div className="flex-shrink-0">
+                  {alert.type === 'warning' ? <Icons.Bell /> : <Icons.PieChart />}
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest">{alert.title}</p>
+                  <p className="text-sm opacity-80">{alert.message}</p>
+                </div>
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Tabs */}
-      <div className="flex gap-2 mb-6 flex-shrink-0">
+      <div className="flex gap-2 mb-6 flex-shrink-0 overflow-x-auto no-scrollbar">
         {[
           { id: 'subs', label: 'Vault', icon: <Icons.Lock /> },
           { id: 'analytics', label: 'Insights', icon: <Icons.PieChart /> },
-          { id: 'timeline', label: 'Timeline', icon: <Icons.Calendar /> }
+          { id: 'timeline', label: 'Timeline', icon: <Icons.Calendar /> },
+          { id: 'graveyard', label: 'Graveyard', icon: <span className="text-lg">🪦</span> }
         ].map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
             className={cn(
-              "flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-xs font-bold transition-all border",
+              "flex-1 min-w-[100px] flex items-center justify-center gap-2 py-3 rounded-2xl text-xs font-bold transition-all border",
               activeTab === tab.id 
                 ? "bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-500/20" 
                 : "bg-white/5 border-white/10 text-white/40 hover:text-white"
@@ -722,9 +900,15 @@ export default function Dashboard() {
       {/* Subscription List Header */}
       <div className="mb-3 md:mb-4 flex items-center justify-between flex-shrink-0">
         <h3 className="text-base md:text-xl font-bold text-white">
-          {activeTab === 'subs' ? 'Your Vault' : activeTab === 'analytics' ? 'Spending Insights' : 'Renewal Timeline'}
+          {activeTab === 'subs' ? 'Your Vault' : activeTab === 'analytics' ? 'Spending Insights' : activeTab === 'timeline' ? 'Renewal Timeline' : 'Subscription Graveyard'}
         </h3>
         <div className="flex gap-2">
+          {activeTab === 'graveyard' && (
+            <div className="px-4 py-2 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center gap-2">
+              <span className="text-[10px] font-bold text-green-500 uppercase tracking-widest">Saved So Far:</span>
+              <span className="text-sm font-bold text-white">{formatCurrency(totalBuriedSavings, profile?.currency)}</span>
+            </div>
+          )}
           <button 
             onClick={handleExportCSV}
             className="p-2 md:p-3 bg-white/5 border border-white/10 rounded-xl md:rounded-2xl hover:bg-white/10 transition-all text-white/60"
@@ -745,59 +929,161 @@ export default function Dashboard() {
       <div className="flex-1 overflow-y-auto no-scrollbar pr-1">
         {activeTab === 'subs' && (
           <div className="grid grid-cols-1 gap-3">
-            {subs.length === 0 ? (
+            {activeSubs.length === 0 ? (
               <div className="text-center py-12 bg-zinc-900/50 border border-dashed border-white/10 rounded-2xl">
-                <p className="text-white/40 text-sm">No subscriptions yet.</p>
+                <p className="text-white/40 text-sm">No active subscriptions yet.</p>
               </div>
             ) : (
-              subs.map((sub) => (
+              activeSubs.map((sub) => (
                 <div
                   key={sub.id}
                   className={cn(
-                    "bg-zinc-900/50 border border-white/10 p-3 md:p-5 rounded-2xl flex items-center justify-between group transition-all",
+                    "bg-zinc-900/50 border border-white/10 p-3 md:p-5 rounded-2xl flex flex-col gap-4 group transition-all",
                     isRenewalSoon(sub.nextRenewal.toDate()) && sub.status === 'active' && "border-red-500/30 ring-1 ring-red-500/20",
                     sub.status === 'paused' && "opacity-50 grayscale"
                   )}
                 >
-                  <div className="flex items-center gap-3 md:gap-4">
-                    <div className="w-10 h-10 md:w-14 md:h-14 rounded-xl bg-white/5 flex items-center justify-center text-xl md:text-2xl">
-                      {sub.icon}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-xs md:text-base font-bold text-white truncate max-w-[100px] sm:max-w-none">{sub.name}</h4>
-                        {sub.status === 'paused' && (
-                          <span className="text-[8px] font-bold uppercase bg-white/10 text-white/40 px-1.5 py-0.5 rounded">Paused</span>
-                        )}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3 md:gap-4">
+                      <div className="w-10 h-10 md:w-14 md:h-14 rounded-xl bg-white/5 flex items-center justify-center text-xl md:text-2xl">
+                        {sub.icon}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-white/40 text-[9px] md:text-xs">
-                          {sub.nextRenewal.toDate().toLocaleDateString()}
-                        </p>
-                        <span className="text-[8px] text-purple-400 font-bold uppercase tracking-widest">{sub.category}</span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-xs md:text-base font-bold text-white truncate max-w-[100px] sm:max-w-none">{sub.name}</h4>
+                          {sub.status === 'paused' && (
+                            <span className="text-[8px] font-bold uppercase bg-white/10 text-white/40 px-1.5 py-0.5 rounded">Paused</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <p className="text-white/40 text-[9px] md:text-xs">
+                            {sub.nextRenewal.toDate().toLocaleDateString()}
+                          </p>
+                          <span className="text-[8px] text-purple-400 font-bold uppercase tracking-widest">{sub.category}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 md:gap-4">
+                      <div className="text-right mr-2">
+                        <p className="text-sm md:text-lg font-bold text-white">{formatCurrency(sub.price, profile?.currency)}</p>
+                        <p className="text-white/40 text-[8px] md:text-[10px] uppercase tracking-widest">{sub.billingCycle}</p>
+                      </div>
+                      <div className="flex gap-1">
+                        {sub.nextRenewal.toDate() <= new Date() && (
+                          <button 
+                            onClick={() => handleRenewSub(sub)}
+                            className="p-1.5 md:p-2 text-green-500 hover:bg-green-500/10 rounded-lg transition-all"
+                            title="Renew"
+                          >
+                            <Icons.Refresh />
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => openEditModal(sub)}
+                          className="p-1.5 md:p-2 text-white/20 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-all"
+                          title="Edit"
+                        >
+                          <Icons.Settings />
+                        </button>
+                        <button 
+                          onClick={() => handleTogglePause(sub)}
+                          className="p-1.5 md:p-2 text-white/20 hover:text-purple-400 hover:bg-purple-400/10 rounded-lg transition-all"
+                          title={sub.status === 'active' ? 'Pause' : 'Resume'}
+                        >
+                          {sub.status === 'active' ? <Icons.Pause /> : <Icons.Play />}
+                        </button>
+                        <button 
+                          onClick={() => handleBurySub(sub)}
+                          className="p-1.5 md:p-2 text-white/20 hover:text-zinc-400 hover:bg-white/10 rounded-lg transition-all"
+                          title="Bury in Graveyard"
+                        >
+                          🪦
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteSub(sub)}
+                          className="p-1.5 md:p-2 text-white/20 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
+                          title="Delete"
+                        >
+                          <Icons.Trash2 />
+                        </button>
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 md:gap-4">
-                    <div className="text-right mr-2">
-                      <p className="text-sm md:text-lg font-bold text-white">{formatCurrency(sub.price, profile?.currency)}</p>
-                      <p className="text-white/40 text-[8px] md:text-[10px] uppercase tracking-widest">{sub.billingCycle}</p>
+
+                  {/* Split Bill Info */}
+                  {sub.splitWith && sub.splitWith.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-3 border-t border-white/5">
+                      <span className="text-[9px] font-bold text-white/20 uppercase tracking-widest self-center mr-2">Split With:</span>
+                      {sub.splitWith.map((person, i) => (
+                        <div key={i} className="px-3 py-1 bg-white/5 border border-white/10 rounded-full flex items-center gap-2">
+                          <span className="text-[10px] text-white/60 font-medium">{person.name}</span>
+                          <span className="text-[10px] text-purple-400 font-bold">{formatCurrency(person.amount, profile?.currency)}</span>
+                        </div>
+                      ))}
+                      <div className="ml-auto text-[10px] font-bold text-white/40">
+                        Your Share: <span className="text-white">{formatCurrency(sub.price - sub.splitWith.reduce((a, b) => a + b.amount, 0), profile?.currency)}</span>
+                      </div>
                     </div>
-                    <div className="flex gap-1">
-                      <button 
-                        onClick={() => handleTogglePause(sub)}
-                        className="p-1.5 md:p-2 text-white/20 hover:text-purple-400 hover:bg-purple-400/10 rounded-lg transition-all"
-                        title={sub.status === 'active' ? 'Pause' : 'Resume'}
+                  )}
+
+                  {/* Cancellation Concierge */}
+                  {sub.cancelUrl && (
+                    <div className="pt-3 border-t border-white/5">
+                      <a 
+                        href={sub.cancelUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-[10px] font-bold text-purple-400 hover:text-purple-300 flex items-center gap-1 uppercase tracking-widest"
                       >
-                        {sub.status === 'active' ? <Icons.Pause /> : <Icons.Play />}
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteSub(sub)}
-                        className="p-1.5 md:p-2 text-white/20 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
-                      >
-                        <Icons.Trash2 />
-                      </button>
+                        <Icons.Refresh /> How to Cancel
+                      </a>
                     </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {activeTab === 'graveyard' && (
+          <div className="grid grid-cols-1 gap-3">
+            {buriedSubs.length === 0 ? (
+              <div className="text-center py-20 bg-zinc-900/50 border border-dashed border-white/10 rounded-3xl">
+                <div className="text-4xl mb-4">🪦</div>
+                <p className="text-white/40 text-sm">Your graveyard is empty. <br/>Bury subscriptions you've cancelled to track your savings!</p>
+              </div>
+            ) : (
+              buriedSubs.map((sub) => (
+                <div key={sub.id} className="bg-zinc-900/50 border border-white/10 p-5 rounded-3xl flex items-center justify-between opacity-60 hover:opacity-100 transition-all group">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center text-2xl grayscale">
+                      {sub.icon}
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-white line-through">{sub.name}</h4>
+                      <p className="text-white/40 text-xs">Buried on {sub.buriedAt?.toDate().toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-6">
+                    <div className="text-right">
+                      <p className="text-xs font-bold text-green-500 uppercase tracking-widest">Saved</p>
+                      <p className="text-lg font-bold text-white">
+                        {(() => {
+                          const buriedDate = sub.buriedAt?.toDate() || new Date();
+                          const now = new Date();
+                          const diffMonths = (now.getFullYear() - buriedDate.getFullYear()) * 12 + (now.getMonth() - buriedDate.getMonth());
+                          const monthlyPrice = sub.billingCycle === 'monthly' ? sub.price : sub.price / 12;
+                          return formatCurrency(monthlyPrice * Math.max(1, diffMonths), profile?.currency);
+                        })()}
+                      </p>
+                    </div>
+                    <button 
+                      onClick={() => handleResurrectSub(sub)}
+                      className="p-3 bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white rounded-2xl transition-all"
+                      title="Resurrect"
+                    >
+                      🧟‍♂️
+                    </button>
                   </div>
                 </div>
               ))
@@ -930,43 +1216,45 @@ export default function Dashboard() {
           />
           <div className="bg-zinc-900 border border-white/10 w-full max-w-lg p-8 rounded-[40px] relative z-10 shadow-2xl max-h-[90vh] overflow-y-auto no-scrollbar">
             <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-bold text-white">Add Subscription</h2>
+              <h2 className="text-2xl font-bold text-white">{editingSub ? 'Edit Subscription' : 'Add Subscription'}</h2>
               <button onClick={closeAddModal} className="p-2 hover:bg-white/10 rounded-full text-white/60">
                 <Icons.X />
               </button>
             </div>
 
             <form onSubmit={handleAddSub}>
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-white/60 mb-2">Popular Services</label>
-                <div className="flex gap-3 overflow-x-auto pb-4 no-scrollbar">
-                  {POPULAR_SUBS.map((s) => (
-                    <button
-                      key={s.name}
-                      type="button"
-                      onClick={() => {
-                        const currency = profile?.currency || '$';
-                        const tiers = (s.tiers as any)[currency] || (s.tiers as any)['$'];
-                        setSelectedPopular(s);
-                        setNewSub({ 
-                          ...newSub, 
-                          name: s.name, 
-                          icon: s.icon,
-                          price: tiers[0].price.toString(),
-                          billingCycle: tiers[0].billingCycle || 'monthly'
-                        });
-                      }}
-                      className={cn(
-                        "flex-shrink-0 w-20 h-20 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center justify-center gap-1 transition-all",
-                        selectedPopular?.name === s.name ? "bg-purple-500/20 border-purple-500" : "hover:bg-white/10"
-                      )}
-                    >
-                      <span className="text-2xl">{s.icon}</span>
-                      <span className="text-[10px] font-bold uppercase truncate w-full px-1 text-center text-white">{s.name}</span>
-                    </button>
-                  ))}
+              {!editingSub && (
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-white/60 mb-2">Popular Services</label>
+                  <div className="flex gap-3 overflow-x-auto pb-4 no-scrollbar">
+                    {POPULAR_SUBS.map((s) => (
+                      <button
+                        key={s.name}
+                        type="button"
+                        onClick={() => {
+                          const currency = profile?.currency || '$';
+                          const tiers = (s.tiers as any)[currency] || (s.tiers as any)['$'];
+                          setSelectedPopular(s);
+                          setNewSub({ 
+                            ...newSub, 
+                            name: s.name, 
+                            icon: s.icon,
+                            price: tiers[0].price.toString(),
+                            billingCycle: tiers[0].billingCycle || 'monthly'
+                          });
+                        }}
+                        className={cn(
+                          "flex-shrink-0 w-20 h-20 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center justify-center gap-1 transition-all",
+                          selectedPopular?.name === s.name ? "bg-purple-500/20 border-purple-500" : "hover:bg-white/10"
+                        )}
+                      >
+                        <span className="text-2xl">{s.icon}</span>
+                        <span className="text-[10px] font-bold uppercase truncate w-full px-1 text-center text-white">{s.name}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {selectedPopular && (
                 <div className="mb-6">
@@ -1020,17 +1308,18 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div>
-                  <label className="block text-sm font-medium text-white/60 mb-2">Category</label>
-                  <select
-                    value={newSub.category}
-                    onChange={(e) => setNewSub({ ...newSub, category: e.target.value as any })}
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 appearance-none"
-                  >
-                    {CATEGORIES.map(c => <option key={c} value={c} className="bg-zinc-900">{c}</option>)}
-                  </select>
-                </div>
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-white/60 mb-2">Category</label>
+                <select
+                  value={newSub.category}
+                  onChange={(e) => setNewSub({ ...newSub, category: e.target.value as any })}
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 appearance-none"
+                >
+                  {CATEGORIES.map(c => <option key={c} value={c} className="bg-zinc-900">{c}</option>)}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div>
                   <label className="block text-sm font-medium text-white/60 mb-2">Billing Cycle</label>
                   <div className="grid grid-cols-2 gap-2">
@@ -1049,15 +1338,114 @@ export default function Dashboard() {
                     ))}
                   </div>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-white/60 mb-2">Next Renewal Date</label>
+                  <input 
+                    type="date"
+                    required
+                    value={newSub.nextRenewalDate}
+                    onChange={(e) => setNewSub({ ...newSub, nextRenewalDate: e.target.value })}
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 [color-scheme:dark]"
+                  />
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-white/60 mb-2">Cancellation Link (Optional)</label>
+                <input 
+                  type="url"
+                  value={newSub.cancelUrl}
+                  onChange={(e) => setNewSub({ ...newSub, cancelUrl: e.target.value })}
+                  placeholder="https://netflix.com/cancel"
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                />
+              </div>
+
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-white/60">Split Bill</label>
+                  <button 
+                    type="button"
+                    onClick={() => setIsSplitModalOpen(true)}
+                    className="text-[10px] font-bold text-purple-400 uppercase tracking-widest hover:text-purple-300"
+                  >
+                    + Add Person
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {newSub.splitWith.map((person, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-xl">
+                      <span className="text-sm text-white">{person.name}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-bold text-purple-400">{formatCurrency(person.amount, profile?.currency)}</span>
+                        <button 
+                          type="button"
+                          onClick={() => setNewSub({ ...newSub, splitWith: newSub.splitWith.filter((_, idx) => idx !== i) })}
+                          className="text-red-500/50 hover:text-red-500"
+                        >
+                          <Icons.X />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {newSub.splitWith.length === 0 && (
+                    <p className="text-xs text-white/20 italic">No splits added yet.</p>
+                  )}
+                </div>
               </div>
 
               <button 
                 type="submit"
                 className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-5 rounded-2xl shadow-lg shadow-purple-500/20 transition-all active:scale-95"
               >
-                Add Subscription
+                {editingSub ? 'Update Subscription' : 'Add Subscription'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Split Modal */}
+      {isSplitModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6">
+          <div 
+            onClick={() => setIsSplitModalOpen(false)}
+            className="absolute inset-0 bg-black/60 backdrop-blur-md"
+          />
+          <div className="bg-zinc-900 border border-white/10 w-full max-w-xs p-6 rounded-[32px] relative z-10 shadow-2xl">
+            <h3 className="text-lg font-bold text-white mb-4">Add Split Partner</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">Name</label>
+                <input 
+                  type="text"
+                  value={tempSplit.name}
+                  onChange={(e) => setTempSplit({ ...tempSplit, name: e.target.value })}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">Amount</label>
+                <input 
+                  type="number"
+                  value={tempSplit.amount}
+                  onChange={(e) => setTempSplit({ ...tempSplit, amount: e.target.value })}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                />
+              </div>
+              <button 
+                onClick={() => {
+                  if (tempSplit.name && tempSplit.amount) {
+                    setNewSub({ ...newSub, splitWith: [...newSub.splitWith, { name: tempSplit.name, amount: parseFloat(tempSplit.amount) }] });
+                    setTempSplit({ name: '', amount: '' });
+                    setIsSplitModalOpen(false);
+                  }
+                }}
+                className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl transition-all"
+              >
+                Add Split
+              </button>
+            </div>
           </div>
         </div>
       )}
