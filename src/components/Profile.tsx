@@ -131,8 +131,16 @@ export default function Profile() {
   const handleUpgrade = async (plan: 'monthly' | 'yearly') => {
     if (!config) return;
 
-    const amount = plan === 'monthly' ? config.proPriceMonthly : config.proPriceYearly;
-    const currency = profile?.currency === '₹' ? 'INR' : 'USD';
+    const currencyCode = profile?.currency === '₹' ? 'INR' : 'USD';
+    const pricing = config.pricing?.[currencyCode];
+    
+    if (!pricing) {
+      toast.error("Pricing not available for your currency");
+      return;
+    }
+
+    const amount = plan === 'monthly' ? pricing.monthly : pricing.yearly;
+    const currency = currencyCode;
 
     toast.loading("Creating order...");
     try {
@@ -315,13 +323,13 @@ export default function Profile() {
               <div>
                 <h4 className="text-lg font-bold text-white">Monthly</h4>
                 <div className="mt-2">
-                  {config?.proPriceMonthlyOld && (
+                  {config?.pricing?.[profile?.currency === '₹' ? 'INR' : 'USD']?.monthlyOld && (
                     <span className="text-sm text-white/20 line-through mr-2">
-                      {profile?.currency}{config.proPriceMonthlyOld}
+                      {profile?.currency}{config.pricing[profile?.currency === '₹' ? 'INR' : 'USD'].monthlyOld}
                     </span>
                   )}
                   <p className="text-3xl font-bold text-white inline-block">
-                    {profile?.currency || config?.currency || '$'}{config?.proPriceMonthly || (profile?.currency === '₹' ? '99' : '17')}
+                    {profile?.currency || '$'}{config?.pricing?.[profile?.currency === '₹' ? 'INR' : 'USD']?.monthly || (profile?.currency === '₹' ? '99' : '17')}
                     <span className="text-sm text-white/40 font-normal">/mo</span>
                   </p>
                 </div>
@@ -338,13 +346,13 @@ export default function Profile() {
               <div>
                 <h4 className="text-lg font-bold text-white">Yearly</h4>
                 <div className="mt-2">
-                  {config?.proPriceYearlyOld && (
+                  {config?.pricing?.[profile?.currency === '₹' ? 'INR' : 'USD']?.yearlyOld && (
                     <span className="text-sm text-white/20 line-through mr-2">
-                      {profile?.currency || config?.currency || '$'}{config.proPriceYearlyOld}
+                      {profile?.currency || '$'}{config.pricing[profile?.currency === '₹' ? 'INR' : 'USD'].yearlyOld}
                     </span>
                   )}
                   <p className="text-3xl font-bold text-white inline-block">
-                    {profile?.currency || config?.currency || '$'}{config?.proPriceYearly || (profile?.currency === '₹' ? '999' : '123')}
+                    {profile?.currency || '$'}{config?.pricing?.[profile?.currency === '₹' ? 'INR' : 'USD']?.yearly || (profile?.currency === '₹' ? '999' : '123')}
                     <span className="text-sm text-white/40 font-normal">/yr</span>
                   </p>
                 </div>

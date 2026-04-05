@@ -21,10 +21,17 @@ service cloud.firestore {
     // Collection: config
     // Document ID: configId (e.g., 'pricing')
     // Fields:
-    //   - proPriceMonthly: number (required)
-    //   - proPriceYearly: number (required)
-    //   - proPriceMonthlyOld: number (optional)
-    //   - proPriceYearlyOld: number (optional)
+    //   - pricing: map (required)
+    //     - INR: map
+    //       - monthly: number
+    //       - yearly: number
+    //       - monthlyOld: number (optional)
+    //       - yearlyOld: number (optional)
+    //     - USD: map
+    //       - monthly: number
+    //       - yearly: number
+    //       - monthlyOld: number (optional)
+    //       - yearlyOld: number (optional)
     //
     // Collection: subscriptions
     // Document ID: subId (auto-generated)

@@ -12,13 +12,18 @@ export interface UserProfile {
   trialStartDate: Timestamp;
 }
 
+export interface PricingConfig {
+  monthly: number;
+  yearly: number;
+  monthlyOld?: number;
+  yearlyOld?: number;
+}
+
 export interface Config {
   id: string;
-  proPriceMonthly: number;
-  proPriceYearly: number;
-  proPriceMonthlyOld?: number;
-  proPriceYearlyOld?: number;
-  currency?: string;
+  pricing: {
+    [currency: string]: PricingConfig;
+  };
 }
 
 export interface Subscription {
