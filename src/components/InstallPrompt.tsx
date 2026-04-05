@@ -27,6 +27,7 @@ export default function InstallPrompt() {
     const checkStandalone = () => {
       const isStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
       setIsStandalone(isStandaloneMode);
+      // Always show if not standalone, as requested by user
       if (!isStandaloneMode) {
         setIsVisible(true);
       }
@@ -80,8 +81,8 @@ export default function InstallPrompt() {
         <div className="bg-zinc-900 border border-purple-500/30 p-5 rounded-3xl shadow-2xl shadow-purple-500/20 backdrop-blur-xl">
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-purple-600 flex items-center justify-center text-white shadow-lg shadow-purple-600/20 overflow-hidden">
-                <img src="/icon-192.png" alt="MySubs" className="w-full h-full object-cover" />
+              <div className="w-12 h-12 rounded-2xl bg-purple-600 flex items-center justify-center text-white shadow-lg shadow-purple-600/20 overflow-hidden p-2">
+                <img src="/icon.svg" alt="MySubs" className="w-full h-full object-contain" />
               </div>
               <div>
                 <h3 className="font-bold text-white">Install MySubs</h3>

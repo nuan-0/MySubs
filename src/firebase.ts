@@ -1,7 +1,19 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { 
+  getAuth, 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  signOut, 
+  onAuthStateChanged, 
+  signInAnonymously,
+  User as FirebaseUser 
+} from 'firebase/auth';
 import { getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, addDoc, Timestamp, getDocFromServer, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
+
+if (!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey.includes('TODO')) {
+  console.error("Firebase configuration is missing or contains placeholders. Please set up Firebase in AI Studio.");
+}
 
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
@@ -22,6 +34,7 @@ export {
   signInWithPopup, 
   signOut, 
   onAuthStateChanged, 
+  signInAnonymously,
   doc, 
   getDoc, 
   getDocs,
@@ -47,6 +60,7 @@ export enum OperationType {
   LIST = 'list',
   GET = 'get',
   WRITE = 'write',
+  AUTH = 'auth',
 }
 
 export interface FirestoreErrorInfo {
@@ -68,9 +82,12 @@ export interface FirestoreErrorInfo {
   }
 }
 
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+export function handleFirebaseError(error: unknown, operationType: OperationType, path: string | null) {
+  const errorCode = (error as any)?.code;
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errorMessage,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -87,8 +104,19 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   }
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  console.error('Firebase Error Details:', JSON.stringify(errInfo, null, 2));
+  
+  let userMessage = `Permission denied during ${operationType} on ${path}.`;
+  
+  if (errorCode === 'auth/admin-restricted-operation') {
+    userMessage = "This operation is restricted. Please ensure your domain is authorized in the Firebase Console (Authentication > Settings > Authorized domains) and that the Identity Toolkit API is enabled.";
+  } else if (errorCode === 'auth/operation-not-allowed') {
+    userMessage = "This sign-in method is disabled. Please enable it in the Firebase Console (Authentication > Sign-in method).";
+  } else if (errorCode === 'auth/unauthorized-domain') {
+    userMessage = "This domain is not authorized for Firebase Authentication. Please add it to the 'Authorized domains' list in the Firebase Console.";
+  }
+  
+  return new Error(userMessage);
 }
 
 // Test connection

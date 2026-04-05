@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth, doc, updateDoc, signOut, onSnapshot } from '../firebase';
+import { db, auth, doc, updateDoc, signOut, onSnapshot, deleteDoc, query, collection, where, getDocs } from '../firebase';
 import { useAuth } from './AuthProvider';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -64,6 +64,8 @@ export default function Profile() {
       if (snap.exists()) {
         setConfig(snap.data() as Config);
       }
+    }, (error) => {
+      console.error("Config fetch error:", error);
     });
     return () => unsub();
   }, []);
@@ -89,6 +91,43 @@ export default function Profile() {
   const handleLogout = async () => {
     await signOut(auth);
     navigate('/auth');
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!user) return;
+    
+    const confirmDelete = window.confirm("Are you sure you want to delete your account? This will permanently wipe all your data, including subscriptions and settings. This action cannot be undone.");
+    
+    if (!confirmDelete) return;
+    
+    setLoading(true);
+    try {
+      // 1. Delete user profile
+      await deleteDoc(doc(db, 'users', user.uid));
+      
+      // 2. Delete subscriptions
+      const subsQ = query(collection(db, 'subscriptions'), where('uid', '==', user.uid));
+      const subsSnap = await getDocs(subsQ);
+      const deleteSubs = subsSnap.docs.map(d => deleteDoc(doc(db, 'subscriptions', d.id)));
+      await Promise.all(deleteSubs);
+      
+      // 3. Delete messages
+      const msgsQ = query(collection(db, 'messages'), where('uid', '==', user.uid));
+      const msgsSnap = await getDocs(msgsQ);
+      const deleteMsgs = msgsSnap.docs.map(d => deleteDoc(doc(db, 'messages', d.id)));
+      await Promise.all(deleteMsgs);
+      
+      // 4. Delete Auth account
+      await auth.currentUser?.delete();
+      
+      toast.success("Account deleted successfully");
+      navigate('/auth');
+    } catch (error: any) {
+      console.error("Delete Account Error:", error);
+      toast.error("Failed to delete account: " + error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleUpdatePin = async () => {
@@ -472,6 +511,16 @@ export default function Profile() {
         >
           <Icons.LogOut /> Logout
         </button>
+
+        <div className="pt-4 border-t border-white/5">
+          <button 
+            onClick={handleDeleteAccount}
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-2 text-red-500/50 hover:text-red-500 text-xs font-bold py-4 hover:bg-red-500/5 rounded-2xl transition-all uppercase tracking-widest"
+          >
+            <Icons.AlertCircle /> Delete My Account
+          </button>
+        </div>
       </section>
 
       <footer className="mt-12 text-center text-white/20 text-xs">

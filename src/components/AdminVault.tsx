@@ -104,6 +104,8 @@ export default function AdminVault() {
           currency: data.currency || '$'
         });
       }
+    }, (error) => {
+      console.error("Admin Config Fetch Error:", error);
     });
     return () => {
       unsubUsers();

@@ -222,6 +222,9 @@ export default function Dashboard() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const subData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Subscription));
       setSubs(subData);
+    }, (error) => {
+      console.error("Subscriptions listener error:", error);
+      toast.error("Failed to load subscriptions");
     });
     return () => unsubscribe();
   }, [user]);
@@ -231,6 +234,8 @@ export default function Dashboard() {
     const q = query(collection(db, 'messages'), where('uid', '==', user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setUserMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      console.error("Messages listener error:", error);
     });
 
     // Pro expiration check
