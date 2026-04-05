@@ -46,16 +46,6 @@
       },
       "required": ["uid", "name", "price", "billingCycle", "nextRenewal", "createdAt", "category", "status"]
     },
-    "ResetRequest": {
-      "title": "ResetRequest",
-      "description": "A request to reset a user's PIN",
-      "type": "object",
-      "properties": {
-        "email": { "type": "string", "format": "email", "description": "User's email address" },
-        "requestedAt": { "type": "string", "format": "date-time", "description": "When the request was made" }
-      },
-      "required": ["email", "requestedAt"]
-    },
     "Message": {
       "title": "Message",
       "description": "A message from a user to the admin",
@@ -79,10 +69,6 @@
     "/subscriptions/{subId}": {
       "schema": "Subscription",
       "description": "Subscription records"
-    },
-    "/ResetRequests/{requestId}": {
-      "schema": "ResetRequest",
-      "description": "PIN reset requests"
     },
     "/messages/{messageId}": {
       "schema": "Message",

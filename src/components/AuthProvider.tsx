@@ -8,30 +8,24 @@ interface AuthContextType {
   user: FirebaseUser | null;
   profile: UserProfile | null;
   loading: boolean;
-  isUnlocked: boolean;
-  setUnlocked: (val: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({ 
   user: null, 
   profile: null, 
-  loading: true,
-  isUnlocked: false,
-  setUnlocked: () => {}
+  loading: true
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isUnlocked, setUnlocked] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       if (!u) {
         setProfile(null);
-        setUnlocked(false);
         setLoading(false);
       }
     });
@@ -46,12 +40,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (docSnap.exists()) {
         const data = docSnap.data() as UserProfile;
         setProfile(data);
-
-        // Auto-unlock for admin or Google users
-        const isGoogleUser = user.providerData.some(p => p.providerId === 'google.com');
-        if (data.isAdmin || user.email === ADMIN_EMAIL || isGoogleUser) {
-          setUnlocked(true);
-        }
 
         // Auto-upgrade admin account to Pro until 2099
         if (user.email === ADMIN_EMAIL && (!data.isPro || !data.proExpiryDate)) {
@@ -75,7 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user]);
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isUnlocked, setUnlocked }}>
+    <AuthContext.Provider value={{ user, profile, loading }}>
       {children}
     </AuthContext.Provider>
   );

@@ -30,41 +30,6 @@ async function startServer() {
   });
 
   // API routes
-  app.post("/api/admin/reset-pin", async (req, res) => {
-    const { email, newPin } = req.body;
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: "No token provided" });
-    }
-
-    const idToken = authHeader.split('Bearer ')[1];
-
-    try {
-      const decodedToken = await admin.auth().verifyIdToken(idToken);
-      const userDoc = await admin.firestore()
-        .collection('users')
-        .doc(decodedToken.uid)
-        .get();
-      
-      const isAdmin = userDoc.data()?.isAdmin === true || 
-                      decodedToken.email === "krishnaprayers108@gmail.com";
-
-      if (!isAdmin) {
-        return res.status(403).json({ error: "Forbidden: Admin access required" });
-      }
-
-      const targetUser = await admin.auth().getUserByEmail(email);
-      await admin.auth().updateUser(targetUser.uid, {
-        password: newPin + "MySubs_PIN"
-      });
-      res.json({ success: true });
-    } catch (error: any) {
-      console.error("PIN reset failed:", error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
   // Razorpay: Create Order
   app.post("/api/create-order", async (req, res) => {
     const { amount, currency = 'INR' } = req.body;

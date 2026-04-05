@@ -47,8 +47,6 @@ export default function Profile() {
   const [name, setName] = useState(profile?.name || '');
   const [country, setCountry] = useState(profile?.country || 'United States');
   const [loading, setLoading] = useState(false);
-  const [isChangingPin, setIsChangingPin] = useState(false);
-  const [pinForm, setPinForm] = useState({ currentPin: '', newPin: '', confirmPin: '' });
   const [config, setConfig] = useState<Config | null>(null);
   const navigate = useNavigate();
 
@@ -125,36 +123,6 @@ export default function Profile() {
     } catch (error: any) {
       console.error("Delete Account Error:", error);
       toast.error("Failed to delete account: " + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleUpdatePin = async () => {
-    if (!user || !profile) return;
-    if (pinForm.newPin.length !== 4) {
-      toast.error("New PIN must be 4 digits");
-      return;
-    }
-    if (pinForm.newPin !== pinForm.confirmPin) {
-      toast.error("New PINs do not match");
-      return;
-    }
-    if (pinForm.currentPin !== profile.pin) {
-      toast.error("Current PIN is incorrect");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await updateDoc(doc(db, 'users', user.uid), {
-        pin: pinForm.newPin
-      });
-      toast.success("PIN updated successfully!");
-      setIsChangingPin(false);
-      setPinForm({ currentPin: '', newPin: '', confirmPin: '' });
-    } catch (error) {
-      toast.error("Failed to update PIN");
     } finally {
       setLoading(false);
     }
@@ -334,84 +302,6 @@ export default function Profile() {
             {loading ? "Saving..." : "Save Profile"}
           </button>
         </div>
-      </section>
-
-      {/* Security Section */}
-      <section className="bg-zinc-900/50 border border-white/10 p-5 md:p-8 rounded-2xl md:rounded-[32px] mb-6 md:mb-8 shadow-2xl">
-        <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-white">
-          <div className="text-purple-500">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          </div> 
-          Security
-        </h3>
-        
-        {!isChangingPin ? (
-          <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
-            <div>
-              <p className="text-sm font-bold text-white">Vault PIN</p>
-              <p className="text-xs text-white/40">Change your 4-digit access PIN</p>
-            </div>
-            <button 
-              onClick={() => setIsChangingPin(true)}
-              className="px-4 py-2 bg-purple-600/20 text-purple-400 rounded-xl text-xs font-bold hover:bg-purple-600/30 transition-all"
-            >
-              Change PIN
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1.5 ml-1">Current PIN</label>
-              <input 
-                type="password"
-                maxLength={4}
-                value={pinForm.currentPin}
-                onChange={(e) => setPinForm({...pinForm, currentPin: e.target.value.replace(/\D/g, '')})}
-                placeholder="••••"
-                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white text-center tracking-[1em] focus:outline-none focus:ring-1 focus:ring-purple-500"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1.5 ml-1">New PIN</label>
-                <input 
-                  type="password"
-                  maxLength={4}
-                  value={pinForm.newPin}
-                  onChange={(e) => setPinForm({...pinForm, newPin: e.target.value.replace(/\D/g, '')})}
-                  placeholder="••••"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white text-center tracking-[1em] focus:outline-none focus:ring-1 focus:ring-purple-500"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1.5 ml-1">Confirm PIN</label>
-                <input 
-                  type="password"
-                  maxLength={4}
-                  value={pinForm.confirmPin}
-                  onChange={(e) => setPinForm({...pinForm, confirmPin: e.target.value.replace(/\D/g, '')})}
-                  placeholder="••••"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white text-center tracking-[1em] focus:outline-none focus:ring-1 focus:ring-purple-500"
-                />
-              </div>
-            </div>
-            <div className="flex gap-2 pt-2">
-              <button 
-                onClick={() => setIsChangingPin(false)}
-                className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white/60 rounded-xl font-bold text-sm transition-all"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={handleUpdatePin}
-                disabled={loading || pinForm.newPin.length !== 4}
-                className="flex-2 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-bold text-sm transition-all disabled:opacity-50"
-              >
-                {loading ? "Updating..." : "Update PIN"}
-              </button>
-            </div>
-          </div>
-        )}
       </section>
 
       {/* Upgrade Section */}

@@ -10,9 +10,6 @@ export interface UserProfile {
   proExpiryDate?: Timestamp;
   isAdmin?: boolean;
   trialStartDate: Timestamp;
-  pin: string;
-  tempPin?: string | null;
-  resetApproved?: boolean;
 }
 
 export interface Config {
@@ -35,15 +32,6 @@ export interface Subscription {
   category: 'Entertainment' | 'Productivity' | 'Utilities' | 'Food' | 'Health' | 'Other';
   status: 'active' | 'paused';
   icon?: string;
-}
-
-export interface ResetRequest {
-  id: string;
-  email: string;
-  requestedAt: Timestamp;
-  status?: 'pending' | 'resolved' | 'denied';
-  tempPin?: string;
-  resolvedAt?: Timestamp;
 }
 
 export interface Message {

@@ -10,17 +10,15 @@ import AuthScreen from './components/AuthScreen';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
 import Profile from './components/Profile';
-import AdminVault from './components/AdminVault';
 import TrialLock from './components/TrialLock';
 import { PrivacyPolicy, TermsOfService } from './components/Legal';
 import { Toaster } from 'sonner';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, profile, loading, isUnlocked } = useAuth();
+  const { user, profile, loading } = useAuth();
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-bg text-white">Loading MySubs...</div>;
   if (!user) return <Navigate to="/auth" />;
-  if (!isUnlocked) return <Navigate to="/" />;
 
   // Wait for profile to load if user exists
   if (!profile) return (
@@ -58,18 +56,10 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
-const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { profile, loading } = useAuth();
-  if (loading) return null;
-  if (!profile?.isAdmin) return <Navigate to="/" />;
-  return <>{children}</>;
-};
-
 const HomeRoute = () => {
-  const { user, loading, isUnlocked } = useAuth();
+  const { user, loading } = useAuth();
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-bg text-white">Loading...</div>;
-  if (user && isUnlocked) return <Navigate to="/dashboard" />;
-  if (user) return <AuthScreen />;
+  if (user) return <Navigate to="/dashboard" />;
   return <LandingPage />;
 };
 
@@ -83,7 +73,6 @@ export default function App() {
             <Route path="/" element={<HomeRoute />} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-            <Route path="/admin-vault" element={<ProtectedRoute><AdminRoute><AdminVault /></AdminRoute></ProtectedRoute>} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsOfService />} />
             <Route path="*" element={<Navigate to="/" />} />
