@@ -21,12 +21,18 @@ export default function InstallPrompt() {
   const [isVisible, setIsVisible] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
+  const [isInIframe, setIsInIframe] = useState(false);
 
   useEffect(() => {
     // Check if app is already installed/running in standalone mode
     const checkStandalone = () => {
       const isStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
       setIsStandalone(isStandaloneMode);
+      
+      // Check if in iframe
+      const inIframe = window.self !== window.top;
+      setIsInIframe(inIframe);
+
       // Always show if not standalone, as requested by user
       if (!isStandaloneMode) {
         setIsVisible(true);
@@ -57,7 +63,18 @@ export default function InstallPrompt() {
   }, []);
 
   const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
+    if (isInIframe) {
+      // If in iframe, we can't trigger install prompt. Suggest opening in new tab.
+      window.open(window.location.href, '_blank');
+      return;
+    }
+
+    if (!deferredPrompt) {
+      // If no prompt available, maybe it's already installed or browser doesn't support it
+      // For Chrome/Edge/Android, we can try to show a message
+      alert("Installation prompt not available. If you're using Chrome/Edge, check the address bar for the install icon. If you're on mobile, use the 'Add to Home Screen' option in your browser menu.");
+      return;
+    }
     
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
@@ -113,12 +130,19 @@ export default function InstallPrompt() {
                 </ol>
               </div>
             </div>
+          ) : isInIframe ? (
+            <button 
+              onClick={handleInstallClick}
+              className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-purple-600/20"
+            >
+              <Icons.Share /> Open in New Tab to Install
+            </button>
           ) : (
             <button 
               onClick={handleInstallClick}
               className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-purple-600/20"
             >
-              <Icons.Plus /> Install Now
+              <Icons.Plus /> {deferredPrompt ? 'Install Now' : 'How to Install'}
             </button>
           )}
         </div>
