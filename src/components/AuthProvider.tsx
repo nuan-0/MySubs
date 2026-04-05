@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { auth, db, FirebaseUser, onAuthStateChanged, doc, onSnapshot, updateDoc, Timestamp } from '../firebase';
+import { auth, db, FirebaseUser, onAuthStateChanged, doc, onSnapshot, updateDoc, Timestamp, handleFirebaseError, OperationType } from '../firebase';
 import { UserProfile } from '../types';
+import { toast } from 'sonner';
 
 const ADMIN_EMAIL = "krishnaprayers108@gmail.com";
 
@@ -56,6 +57,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     }, (error) => {
       console.error("Profile subscription error:", error);
+      const firebaseError = handleFirebaseError(error, OperationType.GET, `users/${user.uid}`);
+      toast.error(firebaseError.message);
       setLoading(false);
     });
 

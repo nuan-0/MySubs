@@ -51,6 +51,9 @@ export function AuthForm() {
     setLoading(true);
     try {
       const provider = new GoogleAuthProvider();
+      // Force account selection to prevent "automatic" login with wrong account
+      provider.setCustomParameters({ prompt: 'select_account' });
+      
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
       
@@ -76,18 +79,15 @@ export function AuthForm() {
         } catch (err) {
           throw handleFirebaseError(err, OperationType.CREATE, `users/${user.uid}`);
         }
-      } else if (user.email === "krishnaprayers108@gmail.com") {
-        try {
-          await updateDoc(profileRef, { isAdmin: true });
-        } catch (err) {
-          console.error("Failed to update admin status:", err);
-        }
       }
 
       localStorage.setItem('mysubs_email', user.email || '');
       toast.success("Logged in with Google!");
+      // The ProtectedRoute in App.tsx will handle the redirect to dashboard 
+      // once the AuthProvider picks up the new profile.
       navigate('/dashboard');
     } catch (error: any) {
+      console.error("Google Login Error:", error);
       toast.error(error.message || "Google Login Failed");
     } finally {
       setLoading(false);
